@@ -1,0 +1,32 @@
+# Git and editor
+.git
+.gitattributes
+.cursor
+.DS_Store
+
+# Local env and caches
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Secrets (use env_file / compose secrets at runtime)
+.env
+.env.*
+!.env.example
+
+# Runtime outputs (persist via volume)
+runs
+
+# Mounted from host in docker-compose (keeps build context small)
+data
+
+# Not needed in the image
+tests
+script
+MANUAL.md
+*.md
+!README.md

@@ -1,0 +1,23 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: benchmarking-app:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATA_ROOT: /app/data
+      OUTPUT_ROOT: /app/runs
+    volumes:
+      # Real dataset files from the host (run `git lfs pull` before first use).
+      - ./data:/app/data:ro
+      # Persist benchmark outputs outside the container.
+      - runs:/app/runs
+    restart: unless-stopped
+
+volumes:
+  runs:
