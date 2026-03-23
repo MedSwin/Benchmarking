@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Medical Benchmark Control Plane</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">FastAPI benchmark console</p>
+          <h1>Medical Benchmark Control Plane</h1>
+          <p class="subtitle">
+            Launch MedQuAD, MedMCQA, and HealthBench runs against Gemini 3.1 Pro Preview,
+            GPT-5.1, Grok 4.1 Fast Reasoning, and Mistral Large 3 with live telemetry.
+          </p>
+        </div>
+        <div class="status-card">
+          <span class="dot"></span>
+          <div>
+            <strong>Live event stream</strong>
+            <p>Server-Sent Events update progress, row-level audits, and model summaries in real time.</p>
+          </div>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="card controls">
+          <h2>Start a benchmark job</h2>
+          <form id="job-form">
+            <div class="field-group">
+              <label>Datasets</label>
+              <div class="checks" id="dataset-options"></div>
+            </div>
+            <div class="field-group">
+              <label>Models</label>
+              <div class="checks" id="model-options"></div>
+            </div>
+            <div class="row">
+              <label>
+                Workers
+                <input type="number" name="workers" min="1" value="{{ defaults.workers }}" />
+              </label>
+              <label>
+                Max samples (0 = full)
+                <input type="number" name="max_samples" min="0" value="0" />
+              </label>
+            </div>
+            <div class="row">
+              <label>
+                Seed
+                <input type="number" name="seed" value="13" />
+              </label>
+              <label>
+                Output subdir
+                <input type="text" name="output_subdir" placeholder="optional label" />
+              </label>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" name="enable_bert_score" checked />
+              Enable BERTScore on text-generation datasets
+            </label>
+            <button type="submit">Launch benchmark</button>
+          </form>
+        </section>
+
+        <section class="card overview">
+          <h2>Job overview</h2>
+          <pre id="job-overview">No job yet.</pre>
+        </section>
+
+        <section class="card events wide">
+          <div class="section-header">
+            <h2>Live event feed</h2>
+            <button id="clear-log" type="button">Clear</button>
+          </div>
+          <div id="event-feed" class="feed"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
