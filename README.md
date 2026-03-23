@@ -125,3 +125,24 @@ Run the included tests with:
 ```bash
 pytest
 ```
+
+## Containerization
+
+Build the production image once and start the service with Docker Compose so datasets stay on the host:
+
+```bash
+docker compose up --build
+```
+
+If you prefer plain Docker, install the image, bind-mount `./data` (read-only) and a `runs` volume, and pass `.env` manually:
+
+```bash
+docker build -t benchmarking-app:latest .
+docker run --rm -p 8000:8000 \
+  -v "$(pwd)/data:/app/data:ro" \
+  -v benchapp-runs:/app/runs \
+  --env-file .env \
+  benchmarking-app:latest
+```
+
+The Compose setup already binds `./data` for datasets, writes outputs to the `runs` volume, and exposes port 8000 with a health-check on `/api/config`. Make sure to run `git lfs pull` before starting any container so the datasets are the actual payloads.
