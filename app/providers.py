@@ -9,7 +9,7 @@ import httpx
 from app.config import settings
 from app.metrics import norm_text
 from app.models import MODEL_PROVIDER, ProviderResponse, TargetModel
-from app.rate_limit import AsyncRateLimiter
+from app.rate import AsyncRateLimiter
 
 
 class ProviderPool:
