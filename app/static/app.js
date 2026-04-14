@@ -29,7 +29,10 @@ async function loadConfig() {
   const response = await fetch('/api/config');
   const config = await response.json();
   config.datasets.forEach((dataset) => datasetOptions.appendChild(createCheckbox('datasets', dataset, dataset)));
-  config.models.forEach((model) => modelOptions.appendChild(createCheckbox('models', model.id, `${model.id} (${model.provider})`)));
+  config.models.forEach((model) => {
+    const label = model.display_name || model.id;
+    modelOptions.appendChild(createCheckbox('models', model.id, `${label} (${model.provider})`));
+  });
 }
 
 function openStream(jobId) {
@@ -42,7 +45,7 @@ function openStream(jobId) {
       addEvent({ event: 'parse_error', message: event.data, data: {} });
     }
   });
-  ['job_created', 'dataset_loaded', 'model_started', 'row_scored', 'model_completed', 'job_completed', 'job_failed', 'job_cancelled'].forEach((name) => {
+  ['job_created', 'dataset_loaded', 'model_started', 'row_scored', 'model_completed', 'model_failed', 'job_completed', 'job_failed', 'job_cancelled'].forEach((name) => {
     currentEventSource.addEventListener(name, (event) => addEvent(JSON.parse(event.data)));
   });
 }

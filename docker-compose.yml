@@ -11,13 +11,13 @@ services:
         required: false
     environment:
       DATA_ROOT: /app/data
-      OUTPUT_ROOT: /app/runs
+      OUTPUT_ROOT: /app/output
     volumes:
       # Real dataset files from the host (run `git lfs pull` before first use).
       - ./data:/app/data:ro
       # Persist benchmark outputs outside the container.
-      - runs:/app/runs
+      - output:/app/output
     restart: unless-stopped
 
 volumes:
-  runs:
+  output:

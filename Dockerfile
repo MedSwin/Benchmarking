@@ -11,7 +11,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Runtime paths (override in compose if needed)
 ENV DATA_ROOT=/app/data \
-    OUTPUT_ROOT=/app/runs
+    OUTPUT_ROOT=/app/output
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ COPY app ./app
 RUN pip install --no-cache-dir .
 
 # Writable job output
-RUN mkdir -p /app/runs && chown -R app:app /app
+RUN mkdir -p /app/output && chown -R app:app /app
 
 USER app
 

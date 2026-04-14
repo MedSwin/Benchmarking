@@ -26,6 +26,10 @@ class TargetModel(str, Enum):
     grok_41_fast_reasoning = "grok-4-1-fast-reasoning"
     mistral_large_3 = "mistral-large-latest"
 
+    @property
+    def display_name(self) -> str:
+        return MODEL_DISPLAY_NAMES.get(self, self.value)
+
 
 MODEL_PROVIDER = {
     TargetModel.gemini_31_pro_preview: "google",
@@ -34,6 +38,13 @@ MODEL_PROVIDER = {
     TargetModel.mistral_large_3: "mistral",
 }
 
+# Motivation vs Logic: keep UI and saved state stable by always presenting canonical vendor names.
+MODEL_DISPLAY_NAMES = {
+    TargetModel.gpt_51: "GPT 5.4",
+    TargetModel.grok_41_fast_reasoning: "Grok 4.1",
+    TargetModel.gemini_31_pro_preview: "Gemini-3.1",
+    TargetModel.mistral_large_3: "Mistral Large",
+}
 
 @dataclass
 class DatasetRow(BaseSchema):

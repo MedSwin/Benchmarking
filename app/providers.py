@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import itertools
-from typing import Any, Dict, List, Sequence
+import logging
+from typing import Any, Dict, List, Optional, Sequence
 
 import httpx
 
@@ -10,6 +11,8 @@ from app.config import settings
 from app.metrics import norm_text
 from app.models import MODEL_PROVIDER, ProviderResponse, TargetModel
 from app.rate import AsyncRateLimiter
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderPool:
@@ -22,32 +25,89 @@ class ProviderPool:
                 self._key_cycles[provider] = itertools.cycle(enumerate(keys))
                 rpm = getattr(settings, f"{provider}_requests_per_minute")
                 self._limiters[provider] = [AsyncRateLimiter(rpm) for _ in keys]
+        self._model_cycles: Dict[str, Any] = {}
+        self._model_options: Dict[str, List[str]] = {}
+        self._model_skip_limits: Dict[str, int] = {}
+        for provider, models in settings.provider_models.items():
+            if not models:
+                continue
+            sequence = self._build_weighted_model_sequence(models)
+            self._model_cycles[provider] = itertools.cycle(sequence)
+            self._model_options[provider] = models
+            self._model_skip_limits[provider] = max(1, len(models) * 4)
         self._client = httpx.AsyncClient(timeout=settings.request_timeout_seconds)
+
+    @staticmethod
+    def _build_weighted_model_sequence(models: List[str]) -> List[str]:
+        if len(models) <= 1:
+            return models
+        weighted_sequence: List[str] = []
+        total = len(models)
+        for index, model in enumerate(models):
+            weight = 2 ** (total - index - 1)
+            weighted_sequence.extend([model] * weight)
+        return weighted_sequence
+
+    def _next_model(self, provider: str, skip_model: Optional[str] = None) -> str:
+        sequence = self._model_cycles[provider]
+        model = next(sequence)
+        if skip_model and model == skip_model:
+            limit = self._model_skip_limits.get(
+                provider,
+                max(1, len(self._model_options.get(provider, [])) * 4),
+            )
+            for _ in range(limit):
+                model = next(sequence)
+                if model != skip_model:
+                    break
+        return model
 
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def _lease(self, provider: str) -> tuple[str, AsyncRateLimiter]:
+    # Motivation vs Logic
+    # Motivation: balance traffic across provider models and recover quickly from rate limits.
+    # Logic: reuse the same lock to rotate API keys and the weighted model cycle, skipping variants that just produced 429s.
+    async def _lease(self, provider: str, skip_model: Optional[str] = None) -> tuple[str, AsyncRateLimiter, str]:
         async with self._lock:
-            if provider not in self._key_cycles:
-                raise RuntimeError(f"No API key configured for provider '{provider}'.")
+            if provider not in self._key_cycles or provider not in self._model_cycles:
+                raise RuntimeError(f"No API key or model configured for provider '{provider}'.")
             idx, key = next(self._key_cycles[provider])
             limiter = self._limiters[provider][idx]
+            selected_model = self._next_model(provider, skip_model)
         await limiter.acquire()
-        return key, limiter
+        return key, limiter, selected_model
 
     async def generate(self, model: TargetModel, messages: Sequence[Dict[str, str]], max_tokens: int) -> ProviderResponse:
         provider = MODEL_PROVIDER[model]
-        key, _ = await self._lease(provider)
-        if provider == "openai":
-            return await self._call_openai(key, str(model), messages, max_tokens)
-        if provider == "xai":
-            return await self._call_xai(key, str(model), messages, max_tokens)
-        if provider == "google":
-            return await self._call_google(key, str(model), messages, max_tokens)
-        if provider == "mistral":
-            return await self._call_mistral(key, str(model), messages, max_tokens)
-        raise RuntimeError(f"Unsupported provider: {provider}")
+        configured_models = self._model_options.get(provider)
+        if not configured_models:
+            raise RuntimeError(f"No models configured for provider '{provider}'.")
+        attempts = 0
+        max_attempts = len(configured_models)
+        skip_model: Optional[str] = None
+        last_exception: Optional[Exception] = None
+        while attempts < max_attempts:
+            key, _, selected_model = await self._lease(provider, skip_model=skip_model)
+            try:
+                if provider == "openai":
+                    return await self._call_openai(key, selected_model, messages, max_tokens)
+                if provider == "xai":
+                    return await self._call_xai(key, selected_model, messages, max_tokens)
+                if provider == "google":
+                    return await self._call_google(key, selected_model, messages, max_tokens)
+                if provider == "mistral":
+                    return await self._call_mistral(key, selected_model, messages, max_tokens)
+                raise RuntimeError(f"Unsupported provider: {provider}")
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429:
+                    logger.warning("Model %s for %s hit rate limit; trying next variant.", selected_model, provider)
+                    last_exception = exc
+                    skip_model = selected_model
+                    attempts += 1
+                    continue
+                raise
+        raise RuntimeError(f"All configured models for '{provider}' hit rate limit.") from last_exception
 
     async def _call_openai(self, key: str, model: str, messages: Sequence[Dict[str, str]], max_tokens: int) -> ProviderResponse:
         payload = {

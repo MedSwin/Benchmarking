@@ -72,7 +72,7 @@ Then open `http://127.0.0.1:8000`.
 4. Optionally cap `max_samples` for a smoke test.
 5. Launch the job and watch the live event stream.
 
-The backend schedules row-level work through `asyncio`, fans requests out across the worker pool, and rotates across available API keys per provider. Output is written to `runs/<job_id>/...`.
+The backend schedules row-level work through `asyncio`, fans requests out across the worker pool, and rotates across available API keys per provider. Output is written to `output/<job_id>/...`.
 
 ## Output artifacts
 
@@ -134,15 +134,15 @@ Build the production image once and start the service with Docker Compose so dat
 docker compose up --build
 ```
 
-If you prefer plain Docker, install the image, bind-mount `./data` (read-only) and a `runs` volume, and pass `.env` manually:
+If you prefer plain Docker, install the image, bind-mount `./data` (read-only) and an `output` volume, and pass `.env` manually:
 
 ```bash
 docker build -t benchmarking-app:latest .
 docker run --rm -p 8000:8000 \
   -v "$(pwd)/data:/app/data:ro" \
-  -v benchapp-runs:/app/runs \
+  -v benchapp-output:/app/output \
   --env-file .env \
   benchmarking-app:latest
 ```
 
-The Compose setup already binds `./data` for datasets, writes outputs to the `runs` volume, and exposes port 8000 with a health-check on `/api/config`. Make sure to run `git lfs pull` before starting any container so the datasets are the actual payloads.
+The Compose setup already binds `./data` for datasets, writes outputs to the `output` volume, and exposes port 8000 with a health-check on `/api/config`. Make sure to run `git lfs pull` before starting any container so the datasets are the actual payloads.

@@ -129,26 +129,56 @@ class BenchmarkManager:
         await self._emit(job_id, "dataset_loaded", f"Loaded {len(dataset_rows)} rows.", dataset=dataset.value)
         dataset_dir = self._dataset_dir(job_id, dataset, request.output_subdir)
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        summary: Dict[str, Any] = {"rows": len(dataset_rows), "models": {}}
+        summary: Dict[str, Any] = {"rows": len(dataset_rows), "processed_rows": 0, "models": {}}
         workers = max(1, request.workers or settings.default_workers)
-        for model in request.models:
-            model_rows, model_summary = await self._evaluate_model(job_id, dataset, model, dataset_rows, dataset_dir, workers, request.enable_bert_score)
-            summary["models"][str(model)] = model_summary.model_dump()
-            summary_csv = dataset_dir / f"{str(model)}.csv"
-            write_csv(summary_csv, model_rows)
-            model_summary.artifacts["detail_csv"] = str(summary_csv)
-            await self._emit(
-                job_id,
-                "model_completed",
-                f"Finished {model} on {dataset.value}.",
-                dataset=dataset.value,
-                model=str(model),
-                data=model_summary.model_dump(),
-            )
         summary_path = dataset_dir / "summary.json"
-        summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
-        job = self.get_job(job_id)
-        job.datasets[dataset.value] = summary
+        error_to_raise: Optional[Exception] = None
+        try:
+            for model in request.models:
+                model_rows, model_summary, model_error = await self._evaluate_model(
+                    job_id,
+                    dataset,
+                    model,
+                    dataset_rows,
+                    dataset_dir,
+                    workers,
+                    request.enable_bert_score,
+                )
+                model_id = str(model)
+                summary_csv = dataset_dir / f"{model_id}.csv"
+                write_csv(summary_csv, model_rows)
+                model_summary.artifacts["detail_csv"] = str(summary_csv)
+                display_name = model.display_name
+                model_record = model_summary.model_dump()
+                model_record.update({"model_id": model_id, "display_name": display_name})
+                if model_error:
+                    model_record["error"] = str(model_error)
+                summary["models"][display_name] = model_record
+                summary["processed_rows"] = max(summary["processed_rows"], model_summary.rows)
+                event_name = "model_completed" if not model_error else "model_failed"
+                event_message = (
+                    f"Finished {display_name} on {dataset.value}."
+                    if not model_error
+                    else f"Stopped {display_name} on {dataset.value} after {model_summary.rows} rows: {model_error}"
+                )
+                await self._emit(
+                    job_id,
+                    event_name,
+                    event_message,
+                    dataset=dataset.value,
+                    model=display_name,
+                    data={"processed_rows": model_summary.rows, **({"error": str(model_error)} if model_error else {})},
+                    level="ERROR" if model_error else "INFO",
+                )
+                if model_error:
+                    error_to_raise = model_error
+                    break
+        finally:
+            summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+            job = self.get_job(job_id)
+            job.datasets[dataset.value] = summary
+        if error_to_raise:
+            raise error_to_raise
 
     async def _evaluate_model(
         self,
@@ -159,8 +189,9 @@ class BenchmarkManager:
         dataset_dir: Path,
         workers: int,
         enable_bert_score: bool,
-    ) -> Tuple[List[Dict[str, Any]], JobSummary]:
-        model_name = str(model)
+    ) -> Tuple[List[Dict[str, Any]], JobSummary, Optional[Exception]]:
+        model_id = str(model)
+        model_label = model.display_name
         queue: asyncio.Queue[Tuple[int, Any]] = asyncio.Queue()
         for idx, row in enumerate(rows):
             queue.put_nowait((idx, row))
@@ -170,9 +201,13 @@ class BenchmarkManager:
             DatasetName.medquad: settings.medquad_max_new_tokens,
             DatasetName.healthbench: settings.healthbench_max_new_tokens,
         }[dataset]
+        abort_event = asyncio.Event()
+        model_error: Optional[Exception] = None
 
+        # Root Cause vs Logic: provider exhaustion stopped the run before partial metrics could be flushed, so we now stop all workers and capture the processed rows before returning the error.
         async def worker(worker_id: int) -> None:
-            while True:
+            nonlocal model_error
+            while not abort_event.is_set():
                 try:
                     idx, row = queue.get_nowait()
                 except asyncio.QueueEmpty:
@@ -193,29 +228,32 @@ class BenchmarkManager:
                         "row_scored",
                         f"worker={worker_id} scored row {row.id}",
                         dataset=dataset.value,
-                        model=model_name,
+                        model=model_label,
                         data={"row_id": row.id, **metrics},
                     )
                 except Exception as exc:
+                    if model_error is None:
+                        model_error = exc
+                    abort_event.set()
                     await self._emit(
                         job_id,
                         "row_failed",
                         f"worker={worker_id} failed row {row.id}: {exc}",
                         dataset=dataset.value,
-                        model=model_name,
-                        data={"row_id": row.id},
+                        model=model_label,
+                        data={"row_id": row.id, "error": str(exc)},
                         level="ERROR",
                     )
-                    raise
+                    return
                 finally:
                     queue.task_done()
 
         await self._emit(
             job_id,
             "model_started",
-            f"Starting {model_name} on {dataset.value} with {workers} workers via {MODEL_PROVIDER[model]}",
+            f"Starting {model_label} on {dataset.value} with {workers} workers via {MODEL_PROVIDER[model]}",
             dataset=dataset.value,
-            model=model_name,
+            model=model_label,
         )
         await asyncio.gather(*(worker(worker_id) for worker_id in range(1, workers + 1)))
 
@@ -238,15 +276,15 @@ class BenchmarkManager:
 
         metric_keys = ["rougeL_f", "tok_f1", "uni_prec", "bi_prec", "bert_f"]
         means = {key: mean_metric(final_rows, key) for key in metric_keys}
-        audit_path = dataset_dir / f"{model_name}.audit.jsonl"
+        audit_path = dataset_dir / f"{model_id}.audit.jsonl"
         with audit_path.open("w", encoding="utf-8") as handle:
             for row in final_rows:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         summary = JobSummary(metric_means=means, rows=len(final_rows), artifacts={"audit_jsonl": str(audit_path)})
-        metrics_path = dataset_dir / f"{model_name}.metrics.json"
+        metrics_path = dataset_dir / f"{model_id}.metrics.json"
         metrics_path.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
         summary.artifacts["metrics_json"] = str(metrics_path)
-        return final_rows, summary
+        return final_rows, summary, model_error
 
     def _score_row(self, dataset: DatasetName, row: Any, prediction: str) -> Dict[str, Any]:
         if dataset == DatasetName.medmcqa:

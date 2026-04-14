@@ -70,7 +70,7 @@ And references stored in:
 1. Start the server with `uvicorn app.main:app --reload`.
 2. Open the dashboard in a browser.
 3. Launch a smoke test first, typically `max_samples=10`.
-4. Confirm logs, event flow, and artifact creation under `runs/<job_id>/`.
+4. Confirm logs, event flow, and artifact creation under `output/<job_id>/`.
 5. Scale up to the full dataset once quotas and latency are understood.
 
 ## 4. Auditing and troubleshooting

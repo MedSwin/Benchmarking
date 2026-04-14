@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
-from app.models import BenchmarkRequest
+from app.models import BenchmarkRequest, DatasetName, TargetModel
 from app.runner import BenchmarkManager
 
 
@@ -37,6 +37,25 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
+ALL_DATASETS = {dataset.value for dataset in DatasetName}
+
+
+def _enabled_dataset_values() -> set[str]:
+    return {dataset.value for dataset in settings.enabled_datasets}
+
+
+def _validate_dataset_selection(requested: list[str]) -> None:
+    enabled = _enabled_dataset_values()
+    disabled = [dataset for dataset in requested if dataset in ALL_DATASETS and dataset not in enabled]
+    invalid = [dataset for dataset in requested if dataset not in ALL_DATASETS]
+    if disabled or invalid:
+        detail_parts = []
+        if disabled:
+            detail_parts.append(f"disabled: {', '.join(disabled)}")
+        if invalid:
+            detail_parts.append(f"unknown: {', '.join(invalid)}")
+        raise HTTPException(status_code=400, detail="; ".join(detail_parts))
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
@@ -55,12 +74,28 @@ async def index(request: Request) -> HTMLResponse:
 async def get_config() -> JSONResponse:
     return JSONResponse(
         {
-            "datasets": ["medquad", "medmcqa", "healthbench"],
+            "datasets": [dataset.value for dataset in settings.enabled_datasets],
             "models": [
-                {"id": "gemini-3.1-pro-preview", "provider": "google"},
-                {"id": "gpt-5.1", "provider": "openai"},
-                {"id": "grok-4-1-fast-reasoning", "provider": "xai"},
-                {"id": "mistral-large-latest", "provider": "mistral"},
+                {
+                    "id": TargetModel.gemini_31_pro_preview.value,
+                    "provider": "google",
+                    "display_name": TargetModel.gemini_31_pro_preview.display_name,
+                },
+                {
+                    "id": TargetModel.gpt_51.value,
+                    "provider": "openai",
+                    "display_name": TargetModel.gpt_51.display_name,
+                },
+                {
+                    "id": TargetModel.grok_41_fast_reasoning.value,
+                    "provider": "xai",
+                    "display_name": TargetModel.grok_41_fast_reasoning.display_name,
+                },
+                {
+                    "id": TargetModel.mistral_large_3.value,
+                    "provider": "mistral",
+                    "display_name": TargetModel.mistral_large_3.display_name,
+                },
             ],
             "default_workers": settings.default_workers,
         }
@@ -70,8 +105,10 @@ async def get_config() -> JSONResponse:
 @app.post("/api/jobs")
 async def create_job(payload: dict = Body(...)) -> JSONResponse:
     try:
+        requested_datasets = payload["datasets"]
+        _validate_dataset_selection(requested_datasets)
         request = BenchmarkRequest(
-            datasets=payload["datasets"],
+            datasets=requested_datasets,
             models=payload["models"],
             max_samples=payload.get("max_samples", 0),
             workers=payload.get("workers", settings.default_workers),

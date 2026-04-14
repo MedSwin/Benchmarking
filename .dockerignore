@@ -19,7 +19,7 @@ __pycache__
 !.env.example
 
 # Runtime outputs (persist via volume)
-runs
+output
 
 # Mounted from host in docker-compose (keeps build context small)
 data
