@@ -10,7 +10,7 @@ from collections import defaultdict
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from app.audit import AuditTrail
 from app.config import settings
@@ -29,6 +29,7 @@ from app.models import (
 
 _BERT_SCORE_FN = None
 _BERT_SCORE_IMPORT_ERROR: Optional[str] = None
+_BERT_SCORE_TOKENIZER_PATCHED = False
 
 
 def _get_bert_score_fn():
@@ -42,8 +43,49 @@ def _get_bert_score_fn():
     except Exception as exc:  # pragma: no cover - runtime optional dependency behavior
         _BERT_SCORE_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
         return None
+    _patch_bert_score_tokenizer()
     _BERT_SCORE_FN = bert_score_fn
     return _BERT_SCORE_FN
+
+
+def _ensure_build_inputs_with_special_tokens(tokenizer: Any) -> None:
+    if hasattr(tokenizer, "build_inputs_with_special_tokens"):
+        return
+    cls_token_id = getattr(tokenizer, "cls_token_id", None)
+    sep_token_id = getattr(tokenizer, "sep_token_id", None)
+
+    def build_inputs_with_special_tokens(token_ids: Sequence[int]) -> List[int]:
+        tokens = list(token_ids)
+        output: List[int] = []
+        if cls_token_id is not None:
+            output.append(cls_token_id)
+        output.extend(tokens)
+        if sep_token_id is not None:
+            output.append(sep_token_id)
+        return output
+
+    tokenizer.build_inputs_with_special_tokens = build_inputs_with_special_tokens
+
+
+def _patch_bert_score_tokenizer() -> None:
+    global _BERT_SCORE_TOKENIZER_PATCHED
+    if _BERT_SCORE_TOKENIZER_PATCHED:
+        return
+    # Motivation vs Logic:
+    # Motivation: transformers 5+ ships a new TokenizersBackend that lacks legacy helpers such as
+    # `build_inputs_with_special_tokens`, which BERTScore relies on for empty sentences.
+    # Logic: patch the imported tokenizer factory so every tokenizer exposes a minimal shim before BERTScore runs.
+    import bert_score.utils as bs_utils
+
+    original_get_tokenizer = bs_utils.get_tokenizer
+
+    def patched_get_tokenizer(model_type: str, use_fast: bool = False) -> Any:
+        tokenizer = original_get_tokenizer(model_type, use_fast)
+        _ensure_build_inputs_with_special_tokens(tokenizer)
+        return tokenizer
+
+    bs_utils.get_tokenizer = patched_get_tokenizer
+    _BERT_SCORE_TOKENIZER_PATCHED = True
 
 
 class BenchmarkManager:
@@ -212,11 +254,16 @@ class BenchmarkManager:
         model_id = model.value
         model_label = model.display_name
         refresh_every = max(1, settings.refresh_row)
+        rows_to_process = rows
+        cap = settings.cap_row
+        if cap and len(rows_to_process) > cap:
+            # Motivation vs Logic: enforce the env CAP_ROW to bound tokens and duration without altering dataset metadata.
+            rows_to_process = rows_to_process[:cap]
         queue: asyncio.Queue[Tuple[int, Any]] = asyncio.Queue()
         scored_rows_queue: asyncio.Queue[Optional[Tuple[int, Dict[str, Any]]]] = asyncio.Queue()
-        for idx, row in enumerate(rows):
+        for idx, row in enumerate(rows_to_process):
             queue.put_nowait((idx, row))
-        results: List[Optional[Dict[str, Any]]] = [None] * len(rows)
+        results: List[Optional[Dict[str, Any]]] = [None] * len(rows_to_process)
         max_tokens = {
             DatasetName.medmcqa: settings.medmcqa_max_new_tokens,
             DatasetName.medquad: settings.medquad_max_new_tokens,
@@ -225,7 +272,7 @@ class BenchmarkManager:
         abort_event = asyncio.Event()
         model_error: Optional[Exception] = None
         bert_score_fn = _get_bert_score_fn()
-        if enable_bert_score and rows and dataset != DatasetName.medmcqa and not bert_score_fn:
+        if enable_bert_score and rows_to_process and dataset != DatasetName.medmcqa and not bert_score_fn:
             # Root Cause vs Logic:
             # Root Cause: BERTScore availability was validated only after generation completed, so
             # long-running jobs appeared active but never emitted finalized scored rows.
@@ -288,15 +335,34 @@ class BenchmarkManager:
             if enable_bert_score and bert_score_fn and dataset != DatasetName.medmcqa:
                 preds = [item["prediction"] for item in rows_to_emit]
                 refs = [item["reference"] for item in rows_to_emit]
-                _, _, f1 = bert_score_fn(
-                    preds,
-                    refs,
-                    lang="en",
-                    rescale_with_baseline=False,
-                    model_type=settings.bert_score_model_type,
-                )
-                for row_dict, score in zip(rows_to_emit, f1.tolist()):
-                    row_dict["bert_f"] = float(score)
+                # Root Cause vs Logic:
+                # Root Cause: BERTScore still depends on a tokenizer helper that transformers 5+ can omit,
+                # which would blow up same as the `build_inputs_with_special_tokens` failure.
+                # Logic: shield every scoring call with the patched helper and degrade gracefully on failure.
+                try:
+                    _, _, f1 = bert_score_fn(
+                        preds,
+                        refs,
+                        lang="en",
+                        rescale_with_baseline=False,
+                        model_type=settings.bert_score_model_type,
+                        use_fast_tokenizer=True,
+                    )
+                except Exception as exc:
+                    await self._emit(
+                        job_id,
+                        "batch_scoring_error",
+                        f"Failed to compute BERTScore for batch: {exc}",
+                        dataset=dataset.value,
+                        model=model_label,
+                        level="WARNING",
+                        data={"error": str(exc), "row_ids": [row_dict["id"] for row_dict in rows_to_emit]},
+                    )
+                    for row_dict in rows_to_emit:
+                        row_dict["bert_f"] = 0.0
+                else:
+                    for row_dict, score in zip(rows_to_emit, f1.tolist()):
+                        row_dict["bert_f"] = float(score)
             else:
                 for row_dict in rows_to_emit:
                     row_dict.setdefault("bert_f", 0.0)

@@ -113,6 +113,7 @@ async def get_config() -> JSONResponse:
             "models": settings.enabled_models,
             "default_workers": settings.default_workers,
             "refresh_row": settings.refresh_row,
+            "cap_row": settings.cap_row,
         }
     )
 

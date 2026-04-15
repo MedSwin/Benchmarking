@@ -39,6 +39,17 @@ def _parse_positive_int(env_name: str, default: int) -> int:
     return max(1, parsed)
 
 
+def _parse_non_negative_int(env_name: str, default: int) -> int:
+    raw = os.getenv(env_name)
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(0, parsed)
+
+
 @dataclass
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Medical Benchmark Control Plane")
@@ -49,6 +60,8 @@ class Settings:
     retry_attempts: int = int(os.getenv("RETRY_ATTEMPTS", "3"))
     retry_base_delay_seconds: float = float(os.getenv("RETRY_BASE_DELAY_SECONDS", "2"))
     refresh_row: int = _parse_positive_int("REFRESH_ROW", 10)
+    # Motivation vs Logic: cap the per-model workload to keep long-running benchmarks within token/time budgets.
+    cap_row: int = _parse_non_negative_int("CAP_ROW", 16000)
 
     data_root: Path = Path(os.getenv("DATA_ROOT", "data"))
     output_root: Path = Path(os.getenv("OUTPUT_ROOT", "output"))  # Motivation vs Logic: keep audits and benchmarks centralized under the shared output directory.

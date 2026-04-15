@@ -46,6 +46,18 @@ def _sample_rows(rows: List[DatasetRow], max_samples: int, seed: int) -> List[Da
     return rows
 
 
+def _has_valid_reference_and_prompt(row: DatasetRow) -> bool:
+    if not norm_text(row.reference):
+        return False
+    if not row.prompt:
+        return False
+    for message in row.prompt:
+        content = norm_text(message.get("content") if isinstance(message, dict) else message)
+        if content:
+            return True
+    return False
+
+
 def load_dataset_rows(root: Path, dataset: DatasetName, max_samples: int, seed: int) -> List[DatasetRow]:
     path = dataset_path(root, dataset)
     if not path.exists():
@@ -56,7 +68,9 @@ def load_dataset_rows(root: Path, dataset: DatasetName, max_samples: int, seed: 
         DatasetName.medmcqa: load_medmcqa_rows,
         DatasetName.healthbench: load_healthbench_rows,
     }[dataset]
-    return _sample_rows(loader(path), max_samples, seed)
+    rows = [row for row in loader(path) if _has_valid_reference_and_prompt(row)]
+    # Motivation vs Logic: drop rows without reference/prompt data so provider workers never consume useless tokens.
+    return _sample_rows(rows, max_samples, seed)
 
 
 def load_medquad_rows(path: Path) -> List[DatasetRow]:
