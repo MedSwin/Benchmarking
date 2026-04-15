@@ -1,10 +1,11 @@
 import json
+import asyncio
 from pathlib import Path
 
 from app.datasets import load_healthbench_rows, load_medmcqa_rows, load_medquad_rows
 from app.metrics import compute_text_metrics, tok_f1
-from app.models import BenchmarkRequest, TargetModel
-from app.runner import parse_medmcqa_prediction
+from app.models import BenchmarkRequest, DatasetName, DatasetRow, ProviderResponse, TargetModel
+from app.runner import BenchmarkManager, parse_medmcqa_prediction
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -76,3 +77,61 @@ def test_target_model_parse_accepts_legacy_enum_style_strings():
         models=['TargetModel.gemini_31_pro_preview'],
     )
     assert request.models == [TargetModel.gemini_31_pro_preview]
+
+
+def test_row_scored_event_uses_finalized_bert_score(tmp_path: Path, monkeypatch):
+    manager = BenchmarkManager()
+    job_id = "job-test-bert"
+    manager.event_queues[job_id] = asyncio.Queue()
+
+    class _FakeTensor:
+        def __init__(self, values):
+            self._values = values
+
+        def tolist(self):
+            return self._values
+
+    def fake_bert_score(*_args, **_kwargs):
+        return None, None, _FakeTensor([0.77])
+
+    async def fake_generate(_model, _messages, _max_tokens):
+        return ProviderResponse(text="A viral infection.")
+
+    monkeypatch.setattr("app.runner._get_bert_score_fn", lambda: fake_bert_score)
+    monkeypatch.setattr(manager.provider_pool, "generate", fake_generate)
+
+    async def run_eval():
+        rows = [
+            DatasetRow(
+                id="row-1",
+                prompt=[{"role": "user", "content": "What is flu?"}],
+                reference="A viral infection.",
+            )
+        ]
+        final_rows, _summary, _model_error = await manager._evaluate_model(
+            job_id=job_id,
+            dataset=DatasetName.medquad,
+            model=TargetModel.gpt_51,
+            rows=rows,
+            dataset_dir=tmp_path,
+            workers=1,
+            enable_bert_score=True,
+        )
+        return final_rows
+
+    final_rows = asyncio.run(run_eval())
+    assert final_rows[0]["bert_f"] == 0.77
+
+    events = []
+    queue = manager.event_queues[job_id]
+    while not queue.empty():
+        events.append(queue.get_nowait())
+
+    row_generated = [event for event in events if event.event == "row_generated"]
+    row_scored = [event for event in events if event.event == "row_scored"]
+    assert len(row_generated) == 1
+    assert len(row_scored) == 1
+    assert row_scored[0].data["row_id"] == "row-1"
+    assert row_scored[0].data["bert_f"] == 0.77
+
+    asyncio.run(manager.shutdown())

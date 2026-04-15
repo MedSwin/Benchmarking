@@ -27,6 +27,25 @@
       </header>
 
       <main class="grid">
+        <section class="card live-strip wide">
+          <div class="live-stat">
+            <span class="label">Stream</span>
+            <strong id="stream-status" class="status-pill status-idle">Idle</strong>
+          </div>
+          <div class="live-stat">
+            <span class="label">Job</span>
+            <strong id="job-status" class="status-pill status-idle">No job</strong>
+          </div>
+          <div class="live-stat">
+            <span class="label">Rows scored</span>
+            <strong id="rows-scored">0</strong>
+          </div>
+          <div class="live-stat">
+            <span class="label">Last event</span>
+            <strong id="last-event-time">—</strong>
+          </div>
+        </section>
+
         <section class="card controls">
           <h2>Start a benchmark job</h2>
           <form id="job-form">
@@ -62,13 +81,40 @@
               <input type="checkbox" name="enable_bert_score" checked />
               Enable BERTScore on text-generation datasets
             </label>
-            <button type="submit">Launch benchmark</button>
+            <button type="submit" id="launch-btn">Launch benchmark</button>
           </form>
         </section>
 
         <section class="card overview">
           <h2>Job overview</h2>
           <pre id="job-overview">No job yet.</pre>
+        </section>
+
+        <section class="card metrics">
+          <div class="section-header">
+            <h2>Live model metrics</h2>
+            <p>Rouge-L, token F1, unigram/bigram precision, and BERT F refresh as rows are scored.</p>
+          </div>
+          <div class="metrics-table-wrapper">
+            <table id="metrics-table" class="metrics-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Dataset</th>
+                  <th>Rouge-L</th>
+                  <th>Token F1</th>
+                  <th>Uni Prec</th>
+                  <th>Bi Prec</th>
+                  <th>BERT F</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="empty-row">
+                  <td colspan="7">Select models and run a benchmark to unlock live metrics.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section class="card events wide">

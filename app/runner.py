@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import importlib
 import json
 import random
 import uuid
@@ -26,10 +27,23 @@ from app.models import (
     TargetModel,
 )
 
-try:
-    from bert_score import score as bert_score
-except Exception:  # pragma: no cover - runtime optional dependency behavior
-    bert_score = None
+_BERT_SCORE_FN = None
+_BERT_SCORE_IMPORT_ERROR: Optional[str] = None
+
+
+def _get_bert_score_fn():
+    global _BERT_SCORE_FN, _BERT_SCORE_IMPORT_ERROR
+    if _BERT_SCORE_FN is not None:
+        return _BERT_SCORE_FN
+    if _BERT_SCORE_IMPORT_ERROR is not None:
+        return None
+    try:
+        bert_score_fn = getattr(importlib.import_module("bert_score"), "score")
+    except Exception as exc:  # pragma: no cover - runtime optional dependency behavior
+        _BERT_SCORE_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+        return None
+    _BERT_SCORE_FN = bert_score_fn
+    return _BERT_SCORE_FN
 
 
 class BenchmarkManager:
@@ -197,7 +211,9 @@ class BenchmarkManager:
     ) -> Tuple[List[Dict[str, Any]], JobSummary, Optional[Exception]]:
         model_id = model.value
         model_label = model.display_name
+        refresh_every = max(1, settings.refresh_row)
         queue: asyncio.Queue[Tuple[int, Any]] = asyncio.Queue()
+        scored_rows_queue: asyncio.Queue[Optional[Tuple[int, Dict[str, Any]]]] = asyncio.Queue()
         for idx, row in enumerate(rows):
             queue.put_nowait((idx, row))
         results: List[Optional[Dict[str, Any]]] = [None] * len(rows)
@@ -208,6 +224,17 @@ class BenchmarkManager:
         }[dataset]
         abort_event = asyncio.Event()
         model_error: Optional[Exception] = None
+        bert_score_fn = _get_bert_score_fn()
+        if enable_bert_score and rows and dataset != DatasetName.medmcqa and not bert_score_fn:
+            # Root Cause vs Logic:
+            # Root Cause: BERTScore availability was validated only after generation completed, so
+            # long-running jobs appeared active but never emitted finalized scored rows.
+            # Logic: fail before workers start if BERTScore is required but unavailable.
+            raise RuntimeError(
+                "BERTScore is enabled but unavailable. Install dependencies with "
+                "`pip install -e .` and restart the app. "
+                f"Import error: {_BERT_SCORE_IMPORT_ERROR or 'unknown'}"
+            )
 
         # Root Cause vs Logic: provider exhaustion stopped the run before partial metrics could be flushed, so we now stop all workers and capture the processed rows before returning the error.
         async def worker(worker_id: int) -> None:
@@ -228,13 +255,14 @@ class BenchmarkManager:
                         **row.metadata,
                     }
                     results[idx] = record
+                    await scored_rows_queue.put((idx, record))
                     await self._emit(
                         job_id,
-                        "row_scored",
-                        f"worker={worker_id} scored row {row.id}",
+                        "row_generated",
+                        f"worker={worker_id} generated row {row.id}",
                         dataset=dataset.value,
                         model=model_label,
-                        data={"row_id": row.id, **metrics},
+                        data={"row_id": row.id},
                     )
                 except Exception as exc:
                     if model_error is None:
@@ -253,6 +281,60 @@ class BenchmarkManager:
                 finally:
                     queue.task_done()
 
+        async def _flush_scored_batch(batch: List[Tuple[int, Dict[str, Any]]]) -> None:
+            if not batch:
+                return
+            rows_to_emit = [row_dict for _, row_dict in batch]
+            if enable_bert_score and bert_score_fn and dataset != DatasetName.medmcqa:
+                preds = [item["prediction"] for item in rows_to_emit]
+                refs = [item["reference"] for item in rows_to_emit]
+                _, _, f1 = bert_score_fn(
+                    preds,
+                    refs,
+                    lang="en",
+                    rescale_with_baseline=False,
+                    model_type=settings.bert_score_model_type,
+                )
+                for row_dict, score in zip(rows_to_emit, f1.tolist()):
+                    row_dict["bert_f"] = float(score)
+            else:
+                for row_dict in rows_to_emit:
+                    row_dict.setdefault("bert_f", 0.0)
+            for _, row_dict in batch:
+                row_metrics = {
+                    "row_id": row_dict["id"],
+                    "rougeL_f": float(row_dict.get("rougeL_f", 0.0)),
+                    "tok_f1": float(row_dict.get("tok_f1", 0.0)),
+                    "uni_prec": float(row_dict.get("uni_prec", 0.0)),
+                    "bi_prec": float(row_dict.get("bi_prec", 0.0)),
+                    "bert_f": float(row_dict.get("bert_f", 0.0)),
+                }
+                await self._emit(
+                    job_id,
+                    "row_scored",
+                    f"Scored row {row_dict['id']}",
+                    dataset=dataset.value,
+                    model=model_label,
+                    data=row_metrics,
+                )
+
+        # Motivation vs Logic:
+        # Emit `row_scored` continuously in configurable REFRESH_ROW batches so the UI can
+        # compute and render rolling averages during execution instead of waiting for model completion.
+        async def emit_scored_rows() -> None:
+            pending_batch: List[Tuple[int, Dict[str, Any]]] = []
+            while True:
+                queued = await scored_rows_queue.get()
+                if queued is None:
+                    await _flush_scored_batch(pending_batch)
+                    return
+                pending_batch.append(queued)
+                if len(pending_batch) >= refresh_every:
+                    await _flush_scored_batch(pending_batch)
+                    pending_batch = []
+
+        scored_emitter_task = asyncio.create_task(emit_scored_rows())
+
         await self._emit(
             job_id,
             "model_started",
@@ -261,23 +343,10 @@ class BenchmarkManager:
             model=model_label,
         )
         await asyncio.gather(*(worker(worker_id) for worker_id in range(1, workers + 1)))
+        await scored_rows_queue.put(None)
+        await scored_emitter_task
 
         final_rows = [item for item in results if item is not None]
-        if enable_bert_score and bert_score and final_rows and dataset != DatasetName.medmcqa:
-            preds = [item["prediction"] for item in final_rows]
-            refs = [item["reference"] for item in final_rows]
-            _, _, f1 = bert_score(
-                preds,
-                refs,
-                lang="en",
-                rescale_with_baseline=False,
-                model_type=settings.bert_score_model_type,
-            )
-            for row_dict, score in zip(final_rows, f1.tolist()):
-                row_dict["bert_f"] = float(score)
-        else:
-            for row_dict in final_rows:
-                row_dict.setdefault("bert_f", 0.0)
 
         metric_keys = ["rougeL_f", "tok_f1", "uni_prec", "bi_prec", "bert_f"]
         means = {key: mean_metric(final_rows, key) for key in metric_keys}

@@ -112,6 +112,7 @@ async def get_config() -> JSONResponse:
             "datasets": [dataset.value for dataset in settings.enabled_datasets],
             "models": settings.enabled_models,
             "default_workers": settings.default_workers,
+            "refresh_row": settings.refresh_row,
         }
     )
 

@@ -28,6 +28,17 @@ def _parse_bool_flag(env_name: str, default: bool) -> bool:
     return default
 
 
+def _parse_positive_int(env_name: str, default: int) -> int:
+    raw = os.getenv(env_name)
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(1, parsed)
+
+
 @dataclass
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Medical Benchmark Control Plane")
@@ -37,6 +48,7 @@ class Settings:
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "180"))
     retry_attempts: int = int(os.getenv("RETRY_ATTEMPTS", "3"))
     retry_base_delay_seconds: float = float(os.getenv("RETRY_BASE_DELAY_SECONDS", "2"))
+    refresh_row: int = _parse_positive_int("REFRESH_ROW", 10)
 
     data_root: Path = Path(os.getenv("DATA_ROOT", "data"))
     output_root: Path = Path(os.getenv("OUTPUT_ROOT", "output"))  # Motivation vs Logic: keep audits and benchmarks centralized under the shared output directory.
