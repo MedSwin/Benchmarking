@@ -1,6 +1,6 @@
 # Medical Benchmark Control Plane
 
-This repository now includes a FastAPI application under `app/` that reproduces the benchmark logic from the three original single-file scripts while targeting four hosted models instead of local Hugging Face checkpoints: Gemini 3.1 Pro Preview, GPT-5.1, Grok 4.1 Fast Reasoning, and Mistral Large 3.
+This repository now includes a FastAPI application under `app/` that reproduces the benchmark logic from the three original single-file scripts while targeting four hosted models instead of local Hugging Face checkpoints: Gemini 3.1, GPT-5.4, Grok 4.1, and Mistral Large 3.
 
 ## What the app preserves from the original scripts
 
@@ -111,9 +111,9 @@ The frontend is intentionally lightweight: plain HTML, CSS, and JavaScript serve
 
 The app defaults are wired for:
 
-- `gemini-3.1-pro-preview`
-- `gpt-5.1`
-- `grok-4-1-fast-reasoning`
+- `gemini-3.1`
+- `gpt-5.4`
+- `grok-4-1`
 - `mistral-large-latest`
 
 If your provider account exposes a different alias, override the adapter or endpoint configuration in `.env` or `app/main.py` as needed.

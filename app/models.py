@@ -21,14 +21,41 @@ class DatasetName(str, Enum):
 
 
 class TargetModel(str, Enum):
-    gemini_31_pro_preview = "gemini-3.1-pro-preview"
-    gpt_51 = "gpt-5.1"
-    grok_41_fast_reasoning = "grok-4-1-fast-reasoning"
+    gemini_31_pro_preview = "gemini-3.1"
+    gpt_51 = "gpt-5.4"
+    grok_41_fast_reasoning = "grok-4-1"
     mistral_large_3 = "mistral-large-latest"
 
     @property
     def display_name(self) -> str:
         return MODEL_DISPLAY_NAMES.get(self, self.value)
+
+    @classmethod
+    def parse(cls, value: "TargetModel | str") -> "TargetModel":
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if raw.startswith(f"{cls.__name__}."):
+                raw = raw.split(".", 1)[1]
+            # Root Cause vs Logic:
+            # Root Cause: historical job payloads and docs used preview/legacy ids that no
+            # longer match the canonical UI ids.
+            # Logic: normalize those legacy ids into the current enum so old payloads stay valid
+            # while all newly emitted payloads use the canonical compact names.
+            legacy_aliases = {
+                "gemini-3.1-pro-preview": cls.gemini_31_pro_preview,
+                "gpt-5.1": cls.gpt_51,
+                "grok-4-1-fast-reasoning": cls.grok_41_fast_reasoning,
+            }
+            if raw in legacy_aliases:
+                return legacy_aliases[raw]
+            try:
+                return cls(raw)
+            except ValueError:
+                if raw in cls.__members__:
+                    return cls[raw]
+        raise ValueError(f"Unknown target model: {value}")
 
 
 MODEL_PROVIDER = {
@@ -66,7 +93,7 @@ class BenchmarkRequest(BaseSchema):
 
     def __post_init__(self) -> None:
         self.datasets = [item if isinstance(item, DatasetName) else DatasetName(item) for item in self.datasets]
-        self.models = [item if isinstance(item, TargetModel) else TargetModel(item) for item in self.models]
+        self.models = [TargetModel.parse(item) for item in self.models]
 
 
 @dataclass

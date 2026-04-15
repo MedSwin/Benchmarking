@@ -112,7 +112,7 @@ curl -X POST http://127.0.0.1:8000/api/jobs \
   -H 'Content-Type: application/json' \
   -d '{
     "datasets": ["medquad", "medmcqa"],
-    "models": ["gpt-5.1", "grok-4-1-fast-reasoning"],
+    "models": ["gpt-5.4", "grok-4-1"],
     "workers": 10,
     "max_samples": 100,
     "seed": 13,

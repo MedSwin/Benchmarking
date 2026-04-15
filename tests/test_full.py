@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.datasets import load_healthbench_rows, load_medmcqa_rows, load_medquad_rows
 from app.metrics import compute_text_metrics, tok_f1
+from app.models import BenchmarkRequest, TargetModel
 from app.runner import parse_medmcqa_prediction
 
 
@@ -63,3 +64,15 @@ def test_metrics_are_non_negative():
     assert metrics['rougeL_f'] == 1.0
     assert tok_f1('a b', 'a b') == 1.0
     assert all(value >= 0.0 for value in metrics.values())
+
+
+def test_target_model_parse_accepts_legacy_enum_style_strings():
+    assert TargetModel.parse('TargetModel.gpt_51') == TargetModel.gpt_51
+    assert TargetModel.parse('gpt-5.1') == TargetModel.gpt_51
+    assert TargetModel.parse('gemini-3.1-pro-preview') == TargetModel.gemini_31_pro_preview
+    assert TargetModel.gpt_51.value == 'gpt-5.4'
+    request = BenchmarkRequest(
+        datasets=['medquad'],
+        models=['TargetModel.gemini_31_pro_preview'],
+    )
+    assert request.models == [TargetModel.gemini_31_pro_preview]

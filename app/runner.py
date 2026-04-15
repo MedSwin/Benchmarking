@@ -144,7 +144,12 @@ class BenchmarkManager:
                     workers,
                     request.enable_bert_score,
                 )
-                model_id = str(model)
+                # Root Cause vs Logic:
+                # Root Cause: `str(TargetModel)` serializes to enum-style ids
+                # (e.g. TargetModel.gemini_31_pro_preview) and leaked into summary/output.
+                # Logic: persist canonical model ids via `.value` so artifacts and job overview
+                # align with request payload ids.
+                model_id = model.value
                 summary_csv = dataset_dir / f"{model_id}.csv"
                 write_csv(summary_csv, model_rows)
                 model_summary.artifacts["detail_csv"] = str(summary_csv)
@@ -190,7 +195,7 @@ class BenchmarkManager:
         workers: int,
         enable_bert_score: bool,
     ) -> Tuple[List[Dict[str, Any]], JobSummary, Optional[Exception]]:
-        model_id = str(model)
+        model_id = model.value
         model_label = model.display_name
         queue: asyncio.Queue[Tuple[int, Any]] = asyncio.Queue()
         for idx, row in enumerate(rows):

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
 
-from app.models import DatasetName
+from app.models import DatasetName, MODEL_PROVIDER, TargetModel
 
 try:
     from dotenv import load_dotenv
@@ -46,9 +46,13 @@ class Settings:
     google_api_keys: str = os.getenv("GOOGLE_API_KEYS", "")
     mistral_api_keys: str = os.getenv("MISTRAL_API_KEYS", "")
     openai_models: str = os.getenv("OPENAI_MODEL", "gpt-5.4")
-    xai_models: str = os.getenv("XAI_MODEL", "grok-4-1-fast-reasoning")
-    google_models: str = os.getenv("GOOGLE_MODEL", "gemini-3.1-pro-preview")
+    xai_models: str = os.getenv("XAI_MODEL", "grok-4-1")
+    google_models: str = os.getenv("GOOGLE_MODEL", "gemini-3.1")
     mistral_models: str = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
+    openai_enabled: bool = _parse_bool_flag("OPENAI", True)
+    xai_enabled: bool = _parse_bool_flag("XAI", True)
+    google_enabled: bool = _parse_bool_flag("GOOGLEAI", True)
+    mistral_enabled: bool = _parse_bool_flag("MISTRALAI", True)
 
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
     xai_base_url: str = os.getenv("XAI_BASE_URL", "https://api.x.ai/v1")
@@ -74,25 +78,62 @@ class Settings:
     def _split_values(raw: str) -> List[str]:
         return [item.strip() for item in raw.split(",") if item.strip()]
 
+    def _filter_enabled_provider_values(self, raw_values: Dict[str, str]) -> Dict[str, List[str]]:
+        return {
+            provider: self._split_values(raw_values[provider])
+            for provider, enabled in self.enabled_providers.items()
+            if enabled
+        }
+
     @property
     def provider_keys(self) -> Dict[str, List[str]]:
-        return {
-            "openai": self._split_values(self.openai_api_keys),
-            "xai": self._split_values(self.xai_api_keys),
-            "google": self._split_values(self.google_api_keys),
-            "mistral": self._split_values(self.mistral_api_keys),
-        }
+        return self._filter_enabled_provider_values(
+            {
+                "openai": self.openai_api_keys,
+                "xai": self.xai_api_keys,
+                "google": self.google_api_keys,
+                "mistral": self.mistral_api_keys,
+            }
+        )
 
     @property
     def provider_models(self) -> Dict[str, List[str]]:
-        return {
-            "openai": self._split_values(self.openai_models),
-            "xai": self._split_values(self.xai_models),
-            "google": self._split_values(self.google_models),
-            "mistral": self._split_values(self.mistral_models),
-        }
+        return self._filter_enabled_provider_values(
+            {
+                "openai": self.openai_models,
+                "xai": self.xai_models,
+                "google": self.google_models,
+                "mistral": self.mistral_models,
+            }
+        )
 
     # Motivation vs Logic: env-controlled dataset toggles keep the UI, API, and runner aligned with deploy limits.
+    # Motivation vs Logic: env-controlled provider flags keep runtime + UI aligned with available API credentials.
+    @property
+    def enabled_providers(self) -> Dict[str, bool]:
+        return {
+            "openai": self.openai_enabled,
+            "xai": self.xai_enabled,
+            "google": self.google_enabled,
+            "mistral": self.mistral_enabled,
+        }
+
+    @property
+    def enabled_models(self) -> List[Dict[str, str]]:
+        models: List[Dict[str, str]] = []
+        for target_model in TargetModel:
+            provider = MODEL_PROVIDER[target_model]
+            if not self.enabled_providers.get(provider):
+                continue
+            models.append(
+                {
+                    "id": target_model.value,
+                    "provider": provider,
+                    "display_name": target_model.display_name,
+                }
+            )
+        return models
+
     @property
     def enabled_datasets(self) -> List[DatasetName]:
         available = [

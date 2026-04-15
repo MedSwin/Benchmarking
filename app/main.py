@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
-from app.models import BenchmarkRequest, DatasetName, TargetModel
+from app.models import BenchmarkRequest, DatasetName, MODEL_PROVIDER, TargetModel
 from app.runner import BenchmarkManager
 
 
@@ -38,10 +38,15 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 ALL_DATASETS = {dataset.value for dataset in DatasetName}
+ALL_MODELS = {model.value: MODEL_PROVIDER[model] for model in TargetModel}
 
 
 def _enabled_dataset_values() -> set[str]:
     return {dataset.value for dataset in settings.enabled_datasets}
+
+
+def _enabled_model_ids() -> set[str]:
+    return {model["id"] for model in settings.enabled_models}
 
 
 def _validate_dataset_selection(requested: list[str]) -> None:
@@ -57,16 +62,46 @@ def _validate_dataset_selection(requested: list[str]) -> None:
         raise HTTPException(status_code=400, detail="; ".join(detail_parts))
 
 
+def _normalize_model_id(raw_model: str) -> str:
+    try:
+        return TargetModel.parse(raw_model).value
+    except ValueError:
+        return raw_model
+
+
+# Root Cause vs Logic:
+# Root Cause: the API config endpoint returned model ids using `str(TargetModel)` (e.g. TargetModel.gpt_51),
+# while request validation only accepted canonical ids (e.g. gpt-5.4).
+# Logic: normalize incoming ids through TargetModel.parse so enum-style ids continue working, while preserving
+# canonical ids for scheduling and strict unknown/disabled validation.
+def _validate_model_selection(requested: list[str]) -> list[str]:
+    enabled = _enabled_model_ids()
+    normalized = [_normalize_model_id(model) for model in requested]
+    disabled = [raw for raw, model in zip(requested, normalized) if model in ALL_MODELS and model not in enabled]
+    invalid = [raw for raw, model in zip(requested, normalized) if model not in ALL_MODELS]
+    if disabled or invalid:
+        detail_parts = []
+        if disabled:
+            detail_parts.append(f"disabled: {', '.join(disabled)}")
+        if invalid:
+            detail_parts.append(f"unknown: {', '.join(invalid)}")
+        raise HTTPException(status_code=400, detail="; ".join(detail_parts))
+    return normalized
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "defaults": {
-                "workers": settings.default_workers,
-            },
+    # Root Cause vs Logic: TemplateResponse expects the request first, so pass it before
+    # the template name to ensure Jinja receives a string rather than a dict as the cache key.
+    context = {
+        "defaults": {
+            "workers": settings.default_workers,
         },
+    }
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        context=context,
     )
 
 
@@ -75,28 +110,7 @@ async def get_config() -> JSONResponse:
     return JSONResponse(
         {
             "datasets": [dataset.value for dataset in settings.enabled_datasets],
-            "models": [
-                {
-                    "id": TargetModel.gemini_31_pro_preview.value,
-                    "provider": "google",
-                    "display_name": TargetModel.gemini_31_pro_preview.display_name,
-                },
-                {
-                    "id": TargetModel.gpt_51.value,
-                    "provider": "openai",
-                    "display_name": TargetModel.gpt_51.display_name,
-                },
-                {
-                    "id": TargetModel.grok_41_fast_reasoning.value,
-                    "provider": "xai",
-                    "display_name": TargetModel.grok_41_fast_reasoning.display_name,
-                },
-                {
-                    "id": TargetModel.mistral_large_3.value,
-                    "provider": "mistral",
-                    "display_name": TargetModel.mistral_large_3.display_name,
-                },
-            ],
+            "models": settings.enabled_models,
             "default_workers": settings.default_workers,
         }
     )
@@ -106,10 +120,12 @@ async def get_config() -> JSONResponse:
 async def create_job(payload: dict = Body(...)) -> JSONResponse:
     try:
         requested_datasets = payload["datasets"]
+        requested_models = payload["models"]
         _validate_dataset_selection(requested_datasets)
+        normalized_models = _validate_model_selection(requested_models)
         request = BenchmarkRequest(
             datasets=requested_datasets,
-            models=payload["models"],
+            models=normalized_models,
             max_samples=payload.get("max_samples", 0),
             workers=payload.get("workers", settings.default_workers),
             seed=payload.get("seed", 13),

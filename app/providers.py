@@ -84,7 +84,12 @@ class ProviderPool:
         if not configured_models:
             raise RuntimeError(f"No models configured for provider '{provider}'.")
         attempts = 0
-        max_attempts = len(configured_models)
+        # Root Cause vs Logic:
+        # Root Cause: with a single configured model alias, the old logic retried only once
+        # on HTTP 429 and failed the full provider immediately.
+        # Logic: retry across multiple 429 windows using env-configured retry attempts, rotating
+        # model aliases when available and backing off between attempts.
+        max_attempts = max(1, settings.retry_attempts) * max(1, len(configured_models))
         skip_model: Optional[str] = None
         last_exception: Optional[Exception] = None
         while attempts < max_attempts:
@@ -101,13 +106,25 @@ class ProviderPool:
                 raise RuntimeError(f"Unsupported provider: {provider}")
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 429:
-                    logger.warning("Model %s for %s hit rate limit; trying next variant.", selected_model, provider)
-                    last_exception = exc
-                    skip_model = selected_model
                     attempts += 1
+                    last_exception = exc
+                    has_variants = len(configured_models) > 1
+                    skip_model = selected_model if has_variants else None
+                    delay_seconds = settings.retry_base_delay_seconds * (2 ** min(attempts - 1, 5))
+                    logger.warning(
+                        "Model %s for %s hit rate limit (attempt %d/%d); retrying in %.1fs.",
+                        selected_model,
+                        provider,
+                        attempts,
+                        max_attempts,
+                        delay_seconds,
+                    )
+                    if attempts >= max_attempts:
+                        break
+                    await asyncio.sleep(delay_seconds)
                     continue
                 raise
-        raise RuntimeError(f"All configured models for '{provider}' hit rate limit.") from last_exception
+        raise RuntimeError(f"All configured models for '{provider}' hit rate limit after {max_attempts} attempts.") from last_exception
 
     async def _call_openai(self, key: str, model: str, messages: Sequence[Dict[str, str]], max_tokens: int) -> ProviderResponse:
         payload = {
