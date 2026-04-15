@@ -1,0 +1,13 @@
+{
+  "metric_means": {
+    "rougeL_f": 0.0,
+    "tok_f1": 0.0,
+    "uni_prec": 0.0,
+    "bi_prec": 0.0,
+    "bert_f": 0.0
+  },
+  "rows": 0,
+  "artifacts": {
+    "audit_jsonl": "runs/b51ec5a35e46/medquad/gpt-5.4.audit.jsonl"
+  }
+}

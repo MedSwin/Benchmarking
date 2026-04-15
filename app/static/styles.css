@@ -115,6 +115,14 @@ input[type="number"], input[type="text"] {
   padding: 8px 10px;
   font-size: 0.84rem;
 }
+select {
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 0.84rem;
+}
 /* Motivation vs Logic:
    Fit more controls/metrics on one screen by shrinking high-frequency UI chrome.
    Typography, spacing, and pill sizing are reduced while preserving contrast and hierarchy. */
@@ -131,6 +139,11 @@ input[type="number"], input[type="text"] {
   white-space: nowrap;
 }
 .toggle { flex-direction: row; align-items: center; margin-bottom: 10px; color: var(--muted); font-size: 0.8rem; }
+.button-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 button {
   border: none;
   border-radius: 9px;
@@ -142,11 +155,33 @@ button {
   line-height: 1.2;
   cursor: pointer;
 }
+.secondary-button {
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: var(--text);
+}
+.warning-button {
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+}
 button[disabled] {
   opacity: 0.6;
   cursor: not-allowed;
 }
 .section-header { display: flex; justify-content: space-between; align-items: center; }
+.session-card .section-header {
+  gap: 12px;
+  align-items: flex-start;
+}
+.session-card .section-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+.session-picker {
+  margin-top: 10px;
+  max-width: 420px;
+}
 .metrics .section-header { flex-direction: column; gap: 8px; align-items: flex-start; }
 .metrics .section-header p { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.3; }
 .metrics-table-wrapper { margin-top: 10px; overflow-x: auto; }

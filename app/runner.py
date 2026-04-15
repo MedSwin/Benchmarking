@@ -5,6 +5,7 @@ import csv
 import importlib
 import json
 import random
+import re
 import uuid
 from collections import defaultdict
 from contextlib import suppress
@@ -30,6 +31,9 @@ from app.models import (
 _BERT_SCORE_FN = None
 _BERT_SCORE_IMPORT_ERROR: Optional[str] = None
 _BERT_SCORE_TOKENIZER_PATCHED = False
+JOB_STATE_FILENAME = "job.json"
+DATASET_NAMES = {dataset.value for dataset in DatasetName}
+MODEL_BY_DISPLAY_NAME = {model.display_name: model for model in TargetModel}
 
 
 def _get_bert_score_fn():
@@ -97,9 +101,25 @@ class BenchmarkManager:
 
         self.provider_pool = ProviderPool()
         self.tasks: Dict[str, asyncio.Task[Any]] = {}
+        self.stop_reasons: Dict[str, str] = {}
+
+    def load_persisted_jobs(self) -> None:
+        if not settings.output_root.exists():
+            return
+        for job_dir in sorted(settings.output_root.iterdir()):
+            if not job_dir.is_dir():
+                continue
+            job = self._load_persisted_job(job_dir)
+            if job is None:
+                continue
+            self.jobs[job.job_id] = job
+
+    def list_jobs(self) -> List[JobInfo]:
+        return sorted(self.jobs.values(), key=self._job_sort_key, reverse=True)
 
     async def shutdown(self) -> None:
-        for task in self.tasks.values():
+        for job_id, task in list(self.tasks.items()):
+            self.stop_reasons[job_id] = "pause"
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
@@ -114,6 +134,8 @@ class BenchmarkManager:
         job = JobInfo(job_id=job_id, status=JobStatus.queued, request=request)
         self.jobs[job_id] = job
         self.event_queues[job_id] = asyncio.Queue(maxsize=settings.event_queue_size)
+        self.stop_reasons.pop(job_id, None)
+        self._save_job_snapshot(job)
         self.tasks[job_id] = asyncio.create_task(self._run_job(job_id))
         await self._emit(job_id, "job_created", f"Queued benchmark job for {len(request.datasets)} datasets.")
         return job
@@ -123,15 +145,60 @@ class BenchmarkManager:
             raise KeyError(job_id)
         return self.jobs[job_id]
 
-    async def cancel_job(self, job_id: str) -> JobInfo:
+    async def pause_job(self, job_id: str) -> JobInfo:
+        job = self.get_job(job_id)
+        if job.status == JobStatus.paused:
+            return job
+        if job.status not in {JobStatus.queued, JobStatus.running}:
+            raise ValueError(f"Only queued or running jobs can be paused, found {job.status.value}.")
         task = self.tasks.get(job_id)
         if task:
+            self.stop_reasons[job_id] = "pause"
             task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            return self.get_job(job_id)
+        job.status = JobStatus.paused
+        job.finished_at = datetime.now(timezone.utc).isoformat()
+        job.error = job.error or "Session was paused before the run task could continue."
+        self._save_job_snapshot(job)
+        await self._emit(job_id, "job_paused", "Job paused.")
+        return job
+
+    async def resume_job(self, job_id: str) -> JobInfo:
         job = self.get_job(job_id)
+        if job.status in {JobStatus.queued, JobStatus.running}:
+            raise ValueError(f"Job {job_id} is already active.")
+        if job.status == JobStatus.completed:
+            raise ValueError(f"Job {job_id} is already completed.")
+        self.event_queues[job_id] = asyncio.Queue(maxsize=settings.event_queue_size)
+        self.stop_reasons.pop(job_id, None)
+        job.status = JobStatus.queued
+        job.finished_at = None
+        job.error = None
+        self._save_job_snapshot(job)
+        self.tasks[job_id] = asyncio.create_task(self._run_job(job_id))
+        await self._emit(job_id, "job_resumed", "Resuming benchmark job from saved progress.")
+        return job
+
+    async def cancel_job(self, job_id: str) -> JobInfo:
+        job = self.get_job(job_id)
+        task = self.tasks.get(job_id)
+        if task:
+            self.stop_reasons[job_id] = "cancel"
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            return self.get_job(job_id)
         job.status = JobStatus.cancelled
         job.finished_at = datetime.now(timezone.utc).isoformat()
+        self._save_job_snapshot(job)
         await self._emit(job_id, "job_cancelled", "Job cancellation requested.")
         return job
+
+    def get_job_events(self, job_id: str) -> List[Dict[str, Any]]:
+        self.get_job(job_id)
+        return self._read_event_records(job_id)
 
     async def _emit(
         self,
@@ -144,9 +211,11 @@ class BenchmarkManager:
         data: Optional[dict] = None,
         level: str = "INFO",
     ) -> None:
+        ts = datetime.now(timezone.utc).isoformat()
         payload = EventPayload(
             event=event,
             job_id=job_id,
+            ts=ts,
             dataset=dataset,
             model=model,
             message=message,
@@ -161,36 +230,66 @@ class BenchmarkManager:
     async def _run_job(self, job_id: str) -> None:
         job = self.get_job(job_id)
         job.status = JobStatus.running
-        job.started_at = datetime.now(timezone.utc).isoformat()
+        job.started_at = job.started_at or datetime.now(timezone.utc).isoformat()
+        job.finished_at = None
+        self._save_job_snapshot(job)
         request = job.request
         try:
             for dataset in request.datasets:
                 await self._run_dataset(job_id, dataset, request)
             job.status = JobStatus.completed
             job.finished_at = datetime.now(timezone.utc).isoformat()
+            self._save_job_snapshot(job)
             await self._emit(job_id, "job_completed", "Benchmark run completed successfully.")
         except asyncio.CancelledError:
-            job.status = JobStatus.cancelled
+            stop_reason = self.stop_reasons.pop(job_id, "")
+            job.status = JobStatus.paused if stop_reason == "pause" else JobStatus.cancelled
             job.finished_at = datetime.now(timezone.utc).isoformat()
-            await self._emit(job_id, "job_cancelled", "Benchmark run cancelled.", level="WARNING")
+            if job.status == JobStatus.paused:
+                job.error = job.error or "Session paused with partial progress saved."
+            else:
+                job.error = job.error or "Job cancellation requested."
+            self._save_job_snapshot(job)
+            await self._emit(
+                job_id,
+                "job_paused" if job.status == JobStatus.paused else "job_cancelled",
+                "Benchmark run paused with resumable progress saved."
+                if job.status == JobStatus.paused
+                else "Benchmark run cancelled.",
+                level="WARNING",
+            )
             raise
         except Exception as exc:
             job.status = JobStatus.failed
             job.error = str(exc)
             job.finished_at = datetime.now(timezone.utc).isoformat()
+            self._save_job_snapshot(job)
             await self._emit(job_id, "job_failed", str(exc), level="ERROR")
+        finally:
+            self.tasks.pop(job_id, None)
+            self.stop_reasons.pop(job_id, None)
 
     async def _run_dataset(self, job_id: str, dataset: DatasetName, request: BenchmarkRequest) -> None:
         dataset_rows = load_dataset_rows(settings.data_root, dataset, request.max_samples, request.seed)
         await self._emit(job_id, "dataset_loaded", f"Loaded {len(dataset_rows)} rows.", dataset=dataset.value)
         dataset_dir = self._dataset_dir(job_id, dataset, request.output_subdir)
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        summary: Dict[str, Any] = {"rows": len(dataset_rows), "processed_rows": 0, "models": {}}
         workers = max(1, request.workers or settings.default_workers)
         summary_path = dataset_dir / "summary.json"
+        existing_summary = self._load_json_file(summary_path) or {}
+        summary: Dict[str, Any] = {
+            "rows": len(dataset_rows),
+            "processed_rows": int(existing_summary.get("processed_rows", 0) or 0),
+            "models": dict(existing_summary.get("models") or {}),
+        }
+        target_rows = min(len(dataset_rows), settings.cap_row) if settings.cap_row else len(dataset_rows)
         error_to_raise: Optional[Exception] = None
         try:
             for model in request.models:
+                existing_model = summary["models"].get(model.display_name)
+                if existing_model and not existing_model.get("error") and int(existing_model.get("rows", 0) or 0) >= target_rows:
+                    summary["processed_rows"] = max(summary["processed_rows"], int(existing_model.get("rows", 0) or 0))
+                    continue
                 model_rows, model_summary, model_error = await self._evaluate_model(
                     job_id,
                     dataset,
@@ -238,6 +337,7 @@ class BenchmarkManager:
             summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
             job = self.get_job(job_id)
             job.datasets[dataset.value] = summary
+            self._save_job_snapshot(job)
         if error_to_raise:
             raise error_to_raise
 
@@ -259,11 +359,29 @@ class BenchmarkManager:
         if cap and len(rows_to_process) > cap:
             # Motivation vs Logic: enforce the env CAP_ROW to bound tokens and duration without altering dataset metadata.
             rows_to_process = rows_to_process[:cap]
+        audit_path = dataset_dir / f"{model_id}.audit.jsonl"
+        # Motivation vs Logic:
+        # Motivation: pause/resume and restart recovery should continue from saved scored rows instead of repeating completed work.
+        # Logic: hydrate prior row records from the per-model audit file, queue only missing row ids, then rewrite the audit file
+        # from the merged in-memory results once the model finishes or partially completes.
+        row_index_by_id = {str(row.id): idx for idx, row in enumerate(rows_to_process)}
+        existing_rows = self._read_jsonl(audit_path)
+        results: List[Optional[Dict[str, Any]]] = [None] * len(rows_to_process)
+        restored_rows = 0
+        for record in existing_rows:
+            row_id = str(record.get("id") or "").strip()
+            idx = row_index_by_id.get(row_id)
+            if idx is None or results[idx] is not None:
+                continue
+            results[idx] = record
+            restored_rows += 1
+
         queue: asyncio.Queue[Tuple[int, Any]] = asyncio.Queue()
         scored_rows_queue: asyncio.Queue[Optional[Tuple[int, Dict[str, Any]]]] = asyncio.Queue()
         for idx, row in enumerate(rows_to_process):
-            queue.put_nowait((idx, row))
-        results: List[Optional[Dict[str, Any]]] = [None] * len(rows_to_process)
+            if results[idx] is None:
+                queue.put_nowait((idx, row))
+        remaining_rows = queue.qsize()
         max_tokens = {
             DatasetName.medmcqa: settings.medmcqa_max_new_tokens,
             DatasetName.medquad: settings.medquad_max_new_tokens,
@@ -272,7 +390,7 @@ class BenchmarkManager:
         abort_event = asyncio.Event()
         model_error: Optional[Exception] = None
         bert_score_fn = _get_bert_score_fn()
-        if enable_bert_score and rows_to_process and dataset != DatasetName.medmcqa and not bert_score_fn:
+        if enable_bert_score and remaining_rows and dataset != DatasetName.medmcqa and not bert_score_fn:
             # Root Cause vs Logic:
             # Root Cause: BERTScore availability was validated only after generation completed, so
             # long-running jobs appeared active but never emitted finalized scored rows.
@@ -366,6 +484,7 @@ class BenchmarkManager:
             else:
                 for row_dict in rows_to_emit:
                     row_dict.setdefault("bert_f", 0.0)
+            self._append_jsonl_records(audit_path, rows_to_emit)
             for _, row_dict in batch:
                 row_metrics = {
                     "row_id": row_dict["id"],
@@ -404,11 +523,23 @@ class BenchmarkManager:
         await self._emit(
             job_id,
             "model_started",
-            f"Starting {model_label} on {dataset.value} with {workers} workers via {MODEL_PROVIDER[model]}",
+            (
+                f"Resuming {model_label} on {dataset.value} with {workers} workers via {MODEL_PROVIDER[model]} "
+                f"({restored_rows} restored, {remaining_rows} remaining)"
+                if restored_rows
+                else f"Starting {model_label} on {dataset.value} with {workers} workers via {MODEL_PROVIDER[model]}"
+            ),
             dataset=dataset.value,
             model=model_label,
         )
-        await asyncio.gather(*(worker(worker_id) for worker_id in range(1, workers + 1)))
+        try:
+            if remaining_rows:
+                await asyncio.gather(*(worker(worker_id) for worker_id in range(1, workers + 1)))
+        except asyncio.CancelledError:
+            abort_event.set()
+            await scored_rows_queue.put(None)
+            await asyncio.shield(scored_emitter_task)
+            raise
         await scored_rows_queue.put(None)
         await scored_emitter_task
 
@@ -416,7 +547,6 @@ class BenchmarkManager:
 
         metric_keys = ["rougeL_f", "tok_f1", "uni_prec", "bi_prec", "bert_f"]
         means = {key: mean_metric(final_rows, key) for key in metric_keys}
-        audit_path = dataset_dir / f"{model_id}.audit.jsonl"
         with audit_path.open("w", encoding="utf-8") as handle:
             for row in final_rows:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -457,6 +587,223 @@ class BenchmarkManager:
         if output_subdir:
             base = base / output_subdir
         return base / dataset.value
+
+    def _job_dir(self, job_id: str) -> Path:
+        return settings.output_root / job_id
+
+    def _job_state_path(self, job_id: str) -> Path:
+        return self._job_dir(job_id) / JOB_STATE_FILENAME
+
+    def _events_path(self, job_id: str) -> Path:
+        return self._job_dir(job_id) / "events.jsonl"
+
+    def _audit_log_path(self, job_id: str) -> Path:
+        return self._job_dir(job_id) / "audit.log.jsonl"
+
+    def _save_job_snapshot(self, job: JobInfo) -> None:
+        state_path = self._job_state_path(job.job_id)
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(job.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def _load_json_file(self, path: Path) -> Optional[Dict[str, Any]]:
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _append_jsonl_records(self, path: Path, records: Sequence[Dict[str, Any]]) -> None:
+        if not records:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def _load_persisted_job(self, job_dir: Path) -> Optional[JobInfo]:
+        state_path = job_dir / JOB_STATE_FILENAME
+        if state_path.exists():
+            try:
+                raw = json.loads(state_path.read_text(encoding="utf-8"))
+                job = self._job_from_dict(raw)
+            except Exception:
+                job = None
+            else:
+                if job.status in {JobStatus.queued, JobStatus.running}:
+                    # Root Cause vs Logic:
+                    # Root Cause: benchmark execution lives in-process, so an app restart leaves any queued/running
+                    # session without workers even though its partial artifacts are still on disk.
+                    # Logic: restore the saved dashboard state, but mark the session as paused-interrupted so the UI
+                    # can faithfully reload what completed and let the user continue from the saved progress.
+                    job.status = JobStatus.paused
+                    job.finished_at = job.finished_at or self._last_recorded_ts(job.job_id) or datetime.now(timezone.utc).isoformat()
+                    job.error = job.error or "Session was interrupted when the app restarted. Continue will resume from saved progress."
+                    self._save_job_snapshot(job)
+                return job
+        job = self._reconstruct_job_from_artifacts(job_dir)
+        if job is not None:
+            self._save_job_snapshot(job)
+        return job
+
+    def _job_from_dict(self, raw: Dict[str, Any]) -> JobInfo:
+        return JobInfo(
+            job_id=str(raw["job_id"]),
+            status=JobStatus(raw["status"]),
+            request=BenchmarkRequest(**raw["request"]),
+            started_at=raw.get("started_at"),
+            finished_at=raw.get("finished_at"),
+            datasets=raw.get("datasets") or {},
+            error=raw.get("error"),
+        )
+
+    def _reconstruct_job_from_artifacts(self, job_dir: Path) -> Optional[JobInfo]:
+        events = self._read_jsonl(self._events_path(job_dir.name))
+        audit_logs = self._read_jsonl(self._audit_log_path(job_dir.name))
+        summary_files = sorted(job_dir.rglob("summary.json"))
+        if not events and not summary_files:
+            return None
+
+        datasets_in_order: List[str] = []
+        models_in_order: List[str] = []
+        workers = settings.default_workers
+        output_subdir: Optional[str] = None
+        error: Optional[str] = None
+        status: Optional[JobStatus] = None
+        started_at = audit_logs[0].get("ts") if audit_logs else None
+        finished_at = audit_logs[-1].get("ts") if audit_logs else None
+
+        for event in events:
+            event_name = str(event.get("event") or "")
+            dataset_name = str(event.get("dataset") or "")
+            if dataset_name in DATASET_NAMES and dataset_name not in datasets_in_order:
+                datasets_in_order.append(dataset_name)
+            if event_name == "model_started":
+                model_name = str(event.get("model") or "")
+                model_id = self._normalize_model_id(model_name)
+                if model_id and model_id not in models_in_order:
+                    models_in_order.append(model_id)
+                match = re.search(r"with\s+(\d+)\s+workers", str(event.get("message") or ""))
+                if match:
+                    workers = max(1, int(match.group(1)))
+            elif event_name == "job_completed":
+                status = JobStatus.completed
+                finished_at = event.get("ts") or finished_at
+            elif event_name == "job_cancelled":
+                status = JobStatus.cancelled
+                finished_at = event.get("ts") or finished_at
+            elif event_name == "job_failed":
+                status = JobStatus.failed
+                finished_at = event.get("ts") or finished_at
+                error = str(event.get("message") or error or "")
+
+        datasets_payload: Dict[str, Dict[str, Any]] = {}
+        for summary_path in summary_files:
+            relative_parent = summary_path.parent.relative_to(job_dir)
+            if not relative_parent.parts:
+                continue
+            dataset_name = relative_parent.parts[-1]
+            if dataset_name not in DATASET_NAMES:
+                continue
+            if dataset_name not in datasets_in_order:
+                datasets_in_order.append(dataset_name)
+            prefix_parts = relative_parent.parts[:-1]
+            if prefix_parts and output_subdir is None:
+                output_subdir = "/".join(prefix_parts)
+            try:
+                summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            datasets_payload[dataset_name] = summary_payload
+            for model_record in summary_payload.get("models", {}).values():
+                model_id = self._normalize_model_id(
+                    model_record.get("model_id") or model_record.get("display_name") or ""
+                )
+                if model_id and model_id not in models_in_order:
+                    models_in_order.append(model_id)
+                if not error and model_record.get("error"):
+                    error = str(model_record["error"])
+
+        if not datasets_in_order or not models_in_order:
+            return None
+        if status is None:
+            status = JobStatus.paused
+            error = error or "Session was interrupted when the app restarted. Continue will resume from saved progress."
+
+        return JobInfo(
+            job_id=job_dir.name,
+            status=status,
+            request=BenchmarkRequest(
+                datasets=datasets_in_order,
+                models=models_in_order,
+                workers=workers,
+                max_samples=0,
+                seed=13,
+                output_subdir=output_subdir,
+                enable_bert_score=True,
+            ),
+            started_at=started_at,
+            finished_at=finished_at,
+            datasets=datasets_payload,
+            error=error,
+        )
+
+    def _read_event_records(self, job_id: str) -> List[Dict[str, Any]]:
+        event_records = self._read_jsonl(self._events_path(job_id))
+        if not event_records:
+            return []
+        if any(record.get("ts") for record in event_records):
+            return event_records
+        audit_records = self._read_jsonl(self._audit_log_path(job_id))
+        for idx, record in enumerate(event_records):
+            if record.get("ts"):
+                continue
+            if idx < len(audit_records):
+                record["ts"] = audit_records[idx].get("ts")
+        return event_records
+
+    def _last_recorded_ts(self, job_id: str) -> Optional[str]:
+        audit_records = self._read_jsonl(self._audit_log_path(job_id))
+        if audit_records:
+            return audit_records[-1].get("ts")
+        event_records = self._read_jsonl(self._events_path(job_id))
+        if event_records:
+            return event_records[-1].get("ts")
+        return None
+
+    def _job_sort_key(self, job: JobInfo) -> tuple[str, str]:
+        return (job.started_at or job.finished_at or "", job.job_id)
+
+    def _normalize_model_id(self, raw_model: Any) -> str:
+        if not raw_model:
+            return ""
+        text = str(raw_model).strip()
+        if not text:
+            return ""
+        if text in MODEL_BY_DISPLAY_NAME:
+            return MODEL_BY_DISPLAY_NAME[text].value
+        try:
+            return TargetModel.parse(text).value
+        except ValueError:
+            return ""
+
+    def _read_jsonl(self, path: Path) -> List[Dict[str, Any]]:
+        if not path.exists():
+            return []
+        records: List[Dict[str, Any]] = []
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    payload = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(payload, dict):
+                    records.append(payload)
+        return records
 
 
 def _extract_answer_segment(text: str) -> str:

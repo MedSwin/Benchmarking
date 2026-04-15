@@ -29,6 +29,7 @@ manager = BenchmarkManager()
 async def lifespan(app: FastAPI):
     settings.output_root.mkdir(parents=True, exist_ok=True)
     settings.data_root.mkdir(parents=True, exist_ok=True)
+    manager.load_persisted_jobs()
     yield
     await manager.shutdown()
 
@@ -140,6 +141,12 @@ async def create_job(payload: dict = Body(...)) -> JSONResponse:
     return JSONResponse(job.model_dump())
 
 
+@app.get("/api/jobs")
+async def list_jobs() -> JSONResponse:
+    jobs = [job.model_dump() for job in manager.list_jobs()]
+    return JSONResponse(jobs)
+
+
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: str) -> JSONResponse:
     try:
@@ -149,12 +156,43 @@ async def get_job(job_id: str) -> JSONResponse:
     return JSONResponse(job.model_dump())
 
 
+@app.get("/api/jobs/{job_id}/history")
+async def get_job_history(job_id: str) -> JSONResponse:
+    try:
+        events = manager.get_job_events(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    return JSONResponse(events)
+
+
 @app.delete("/api/jobs/{job_id}")
 async def cancel_job(job_id: str) -> JSONResponse:
     try:
         job = await manager.cancel_job(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
+    return JSONResponse(job.model_dump())
+
+
+@app.post("/api/jobs/{job_id}/pause")
+async def pause_job(job_id: str) -> JSONResponse:
+    try:
+        job = await manager.pause_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return JSONResponse(job.model_dump())
+
+
+@app.post("/api/jobs/{job_id}/resume")
+async def resume_job(job_id: str) -> JSONResponse:
+    try:
+        job = await manager.resume_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return JSONResponse(job.model_dump())
 
 
@@ -169,7 +207,7 @@ async def stream_events(job_id: str):
         while True:
             event = await queue.get()
             yield {"event": event.event, "data": json.dumps(event.model_dump())}
-            if event.event in {"job_completed", "job_failed", "job_cancelled"}:
+            if event.event in {"job_completed", "job_failed", "job_cancelled", "job_paused"}:
                 break
 
     return EventSourceResponse(generator())

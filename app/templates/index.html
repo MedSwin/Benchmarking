@@ -46,6 +46,19 @@
           </div>
         </section>
 
+        <section class="card wide session-card">
+          <div class="section-header">
+            <h2>Sessions</h2>
+            <p>Reloaded sessions are listed by ID so you can switch across saved runs after a restart.</p>
+          </div>
+          <label class="session-picker">
+            Session ID
+            <select id="session-select">
+              <option value="">No sessions yet</option>
+            </select>
+          </label>
+        </section>
+
         <section class="card controls">
           <h2>Start a benchmark job</h2>
           <form id="job-form">
@@ -81,7 +94,11 @@
               <input type="checkbox" name="enable_bert_score" checked />
               Enable BERTScore on text-generation datasets
             </label>
-            <button type="submit" id="launch-btn">Launch benchmark</button>
+            <div class="button-row">
+              <button type="submit" id="launch-btn">Launch</button>
+              <button type="button" id="continue-btn" class="secondary-button" disabled>Continue</button>
+              <button type="button" id="pause-btn" class="warning-button" disabled>Pause</button>
+            </div>
           </form>
         </section>
 
@@ -99,8 +116,8 @@
             <table id="metrics-table" class="metrics-table">
               <thead>
                 <tr>
-                  <th>Model</th>
                   <th>Dataset</th>
+                  <th>Model</th>
                   <th>Rouge-L</th>
                   <th>Token F1</th>
                   <th>Uni Prec</th>

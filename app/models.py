@@ -106,6 +106,7 @@ class JobSummary(BaseSchema):
 class JobStatus(str, Enum):
     queued = "queued"
     running = "running"
+    paused = "paused"
     completed = "completed"
     failed = "failed"
     cancelled = "cancelled"
@@ -126,6 +127,7 @@ class JobInfo(BaseSchema):
 class EventPayload(BaseSchema):
     event: str
     job_id: str
+    ts: Optional[str] = None
     dataset: Optional[str] = None
     model: Optional[str] = None
     message: str = ""

@@ -1,0 +1,13 @@
+{
+  "metric_means": {
+    "rougeL_f": 0.15251488051355622,
+    "tok_f1": 0.26061972042206016,
+    "uni_prec": 0.3639603143869107,
+    "bi_prec": 0.07931744731284401,
+    "bert_f": 0.8470081025004387
+  },
+  "rows": 5000,
+  "artifacts": {
+    "audit_jsonl": "runs/b51ec5a35e46/medquad/gemini-3.1.audit.jsonl"
+  }
+}

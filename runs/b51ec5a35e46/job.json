@@ -1,0 +1,64 @@
+{
+  "job_id": "b51ec5a35e46",
+  "status": "failed",
+  "request": {
+    "datasets": [
+      "medquad"
+    ],
+    "models": [
+      "gemini-3.1",
+      "gpt-5.4"
+    ],
+    "max_samples": 0,
+    "workers": 12,
+    "seed": 13,
+    "output_subdir": null,
+    "enable_bert_score": true
+  },
+  "started_at": "2026-04-15T06:00:23.692587+00:00",
+  "finished_at": "2026-04-15T07:25:16.208567+00:00",
+  "datasets": {
+    "medquad": {
+      "rows": 16407,
+      "processed_rows": 5000,
+      "models": {
+        "Gemini-3.1": {
+          "metric_means": {
+            "rougeL_f": 0.15251488051355622,
+            "tok_f1": 0.26061972042206016,
+            "uni_prec": 0.3639603143869107,
+            "bi_prec": 0.07931744731284401,
+            "bert_f": 0.8470081025004387
+          },
+          "rows": 5000,
+          "artifacts": {
+            "audit_jsonl": "runs/b51ec5a35e46/medquad/gemini-3.1.audit.jsonl",
+            "metrics_json": "runs/b51ec5a35e46/medquad/gemini-3.1.metrics.json",
+            "detail_csv": "runs/b51ec5a35e46/medquad/gemini-3.1.csv"
+          },
+          "model_id": "gemini-3.1",
+          "display_name": "Gemini-3.1"
+        },
+        "GPT 5.4": {
+          "metric_means": {
+            "rougeL_f": 0.0,
+            "tok_f1": 0.0,
+            "uni_prec": 0.0,
+            "bi_prec": 0.0,
+            "bert_f": 0.0
+          },
+          "rows": 0,
+          "artifacts": {
+            "audit_jsonl": "runs/b51ec5a35e46/medquad/gpt-5.4.audit.jsonl",
+            "metrics_json": "runs/b51ec5a35e46/medquad/gpt-5.4.metrics.json",
+            "detail_csv": "runs/b51ec5a35e46/medquad/gpt-5.4.csv"
+          },
+          "model_id": "gpt-5.4",
+          "display_name": "GPT 5.4",
+          "error": "All configured models for 'openai' hit rate limit after 6 attempts."
+        }
+      }
+    }
+  },
+  "error": "All configured models for 'openai' hit rate limit after 6 attempts."
+}
