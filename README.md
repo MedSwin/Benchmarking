@@ -1,6 +1,6 @@
 # Medical Benchmark Control Plane
 
-This repository now includes a FastAPI application under `app/` that reproduces the benchmark logic from the three original single-file scripts while targeting four hosted models instead of local Hugging Face checkpoints: Gemini 3.1, GPT-5.4, Grok 4.1, and Mistral Large 3.
+This repository now includes a FastAPI application under `app/` that reproduces the benchmark logic from the three original single-file scripts while targeting five hosted models instead of local Hugging Face checkpoints: Gemini 3.1, GPT-5.4, Grok 4.1, Mistral Large 3, and Sonet 4.6.
 
 ## What the app preserves from the original scripts
 
@@ -52,6 +52,7 @@ OPENAI_API_KEYS=key-1,key-2,key-3
 GOOGLE_API_KEYS=key-1,key-2
 XAI_API_KEYS=key-1
 MISTRAL_API_KEYS=key-1,key-2
+CLAUDE_API_KEYS=key-1,key-2
 ```
 
 Each provider/key pair gets its own rate limiter. When one key reaches its per-minute limit, the app waits for availability and then continues, which satisfies the “await the API call limit once reached” requirement without dropping work.
@@ -98,7 +99,7 @@ For each dataset/model combination, the app writes:
 ### Backend
 
 - `app/datasets.py` mirrors the dataset-specific prompt and reference extraction logic from the legacy scripts.
-- `app/providers.py` contains provider adapters for OpenAI, Google Gemini, xAI, and Mistral.
+- `app/providers.py` contains provider adapters for OpenAI, Google Gemini, xAI, Mistral, and Claude.
 - `app/rate_limit.py` adds a per-key asynchronous rate limiter.
 - `app/runner.py` manages jobs, concurrency, scoring, persistence, and event emission.
 - `app/audit.py` records structured logs and event payloads for every run.
@@ -107,7 +108,7 @@ For each dataset/model combination, the app writes:
 
 The frontend is intentionally lightweight: plain HTML, CSS, and JavaScript served by FastAPI. It provides a clear operator view for job launch, live event streaming, and job-status inspection without introducing a separate Node build step.
 
-## Notes on the four target models
+## Notes on the five target models
 
 The app defaults are wired for:
 
@@ -115,6 +116,7 @@ The app defaults are wired for:
 - `gpt-5.4`
 - `grok-4-1`
 - `mistral-large-latest`
+- `claude-sonnet-4-6`
 
 If your provider account exposes a different alias, override the adapter or endpoint configuration in `.env` or `app/main.py` as needed.
 

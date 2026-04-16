@@ -17,6 +17,7 @@ Each provider accepts a comma-separated key list:
 - `GOOGLE_API_KEYS`
 - `XAI_API_KEYS`
 - `MISTRAL_API_KEYS`
+- `CLAUDE_API_KEYS`
 
 The app rotates across keys in round-robin order. Each key has its own limiter. This means one exhausted key does not block another still under quota.
 
@@ -28,6 +29,7 @@ Per-provider request budgets are configured with:
 - `GOOGLE_REQUESTS_PER_MINUTE`
 - `XAI_REQUESTS_PER_MINUTE`
 - `MISTRAL_REQUESTS_PER_MINUTE`
+- `CLAUDE_REQUESTS_PER_MINUTE`
 
 When a worker asks for a request slot and the current key has exhausted its 60-second window, the limiter pauses until the oldest request falls out of the window.
 
@@ -112,7 +114,7 @@ curl -X POST http://127.0.0.1:8000/api/jobs \
   -H 'Content-Type: application/json' \
   -d '{
     "datasets": ["medquad", "medmcqa"],
-    "models": ["gpt-5.4", "grok-4-1"],
+    "models": ["gpt-5.4", "claude-sonnet-4-6"],
     "workers": 10,
     "max_samples": 100,
     "seed": 13,

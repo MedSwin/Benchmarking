@@ -71,7 +71,9 @@ def test_target_model_parse_accepts_legacy_enum_style_strings():
     assert TargetModel.parse('TargetModel.gpt_51') == TargetModel.gpt_51
     assert TargetModel.parse('gpt-5.1') == TargetModel.gpt_51
     assert TargetModel.parse('gemini-3.1-pro-preview') == TargetModel.gemini_31_pro_preview
+    assert TargetModel.parse('sonnet-4.6') == TargetModel.claude_sonnet_46
     assert TargetModel.gpt_51.value == 'gpt-5.4'
+    assert TargetModel.claude_sonnet_46.display_name == 'Sonet 4.6'
     request = BenchmarkRequest(
         datasets=['medquad'],
         models=['TargetModel.gemini_31_pro_preview'],

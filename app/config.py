@@ -70,24 +70,29 @@ class Settings:
     xai_api_keys: str = os.getenv("XAI_API_KEYS", "")
     google_api_keys: str = os.getenv("GOOGLE_API_KEYS", "")
     mistral_api_keys: str = os.getenv("MISTRAL_API_KEYS", "")
+    claude_api_keys: str = os.getenv("CLAUDE_API_KEYS", "")
     openai_models: str = os.getenv("OPENAI_MODEL", "gpt-5.4")
     xai_models: str = os.getenv("XAI_MODEL", "grok-4-1")
     google_models: str = os.getenv("GOOGLE_MODEL", "gemini-3.1")
     mistral_models: str = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
+    claude_models: str = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
     openai_enabled: bool = _parse_bool_flag("OPENAI", True)
     xai_enabled: bool = _parse_bool_flag("XAI", True)
     google_enabled: bool = _parse_bool_flag("GOOGLEAI", True)
     mistral_enabled: bool = _parse_bool_flag("MISTRALAI", True)
+    claude_enabled: bool = _parse_bool_flag("CLAUDEAI", True)
 
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
     xai_base_url: str = os.getenv("XAI_BASE_URL", "https://api.x.ai/v1")
     google_base_url: str = os.getenv("GOOGLE_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
     mistral_base_url: str = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
+    claude_base_url: str = os.getenv("CLAUDE_BASE_URL", "https://api.anthropic.com/v1")
 
     openai_requests_per_minute: int = int(os.getenv("OPENAI_REQUESTS_PER_MINUTE", "60"))
     xai_requests_per_minute: int = int(os.getenv("XAI_REQUESTS_PER_MINUTE", "60"))
     google_requests_per_minute: int = int(os.getenv("GOOGLE_REQUESTS_PER_MINUTE", "60"))
     mistral_requests_per_minute: int = int(os.getenv("MISTRAL_REQUESTS_PER_MINUTE", "60"))
+    claude_requests_per_minute: int = int(os.getenv("CLAUDE_REQUESTS_PER_MINUTE", "60"))
 
     medmcqa_max_new_tokens: int = int(os.getenv("MEDMCQA_MAX_NEW_TOKENS", "8"))
     medquad_max_new_tokens: int = int(os.getenv("MEDQUAD_MAX_NEW_TOKENS", "256"))
@@ -118,6 +123,7 @@ class Settings:
                 "xai": self.xai_api_keys,
                 "google": self.google_api_keys,
                 "mistral": self.mistral_api_keys,
+                "claude": self.claude_api_keys,
             }
         )
 
@@ -129,6 +135,7 @@ class Settings:
                 "xai": self.xai_models,
                 "google": self.google_models,
                 "mistral": self.mistral_models,
+                "claude": self.claude_models,
             }
         )
 
@@ -141,6 +148,7 @@ class Settings:
             "xai": self.xai_enabled,
             "google": self.google_enabled,
             "mistral": self.mistral_enabled,
+            "claude": self.claude_enabled,
         }
 
     @property

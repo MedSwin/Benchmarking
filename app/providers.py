@@ -103,6 +103,8 @@ class ProviderPool:
                     return await self._call_google(key, selected_model, messages, max_tokens)
                 if provider == "mistral":
                     return await self._call_mistral(key, selected_model, messages, max_tokens)
+                if provider == "claude":
+                    return await self._call_claude(key, selected_model, messages, max_tokens)
                 raise RuntimeError(f"Unsupported provider: {provider}")
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 429:
@@ -214,4 +216,41 @@ class ProviderPool:
             text = " ".join(part.get("text", "") for part in content if isinstance(part, dict))
         else:
             text = str(content)
+        return ProviderResponse(text=norm_text(text), raw=data)
+
+    # Motivation vs Logic:
+    # Motivation: Claude uses Anthropic's Messages API shape instead of the chat-completions payload
+    # used by several other providers in this app.
+    # Logic: split system prompts into Anthropic's top-level `system` field, pass the remaining
+    # conversation through `messages`, and normalize the returned text blocks into the shared response type.
+    async def _call_claude(self, key: str, model: str, messages: Sequence[Dict[str, str]], max_tokens: int) -> ProviderResponse:
+        system_parts = [item["content"] for item in messages if item["role"] == "system"]
+        payload: Dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {"role": item["role"], "content": item["content"]}
+                for item in messages
+                if item["role"] != "system"
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0,
+        }
+        if system_parts:
+            payload["system"] = "\n\n".join(system_parts)
+        response = await self._client.post(
+            f"{settings.claude_base_url}/messages",
+            headers={
+                "x-api-key": key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
+        text = " ".join(
+            block.get("text", "")
+            for block in data.get("content", [])
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
         return ProviderResponse(text=norm_text(text), raw=data)

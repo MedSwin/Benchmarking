@@ -1,0 +1,25 @@
+{
+  "job_id": "1bac2b6b9212",
+  "status": "running",
+  "request": {
+    "datasets": [
+      "medquad",
+      "healthbench"
+    ],
+    "models": [
+      "gemini-3.1",
+      "gpt-5.4",
+      "grok-4-1",
+      "claude-sonnet-4-6"
+    ],
+    "max_samples": 0,
+    "workers": 10,
+    "seed": 13,
+    "output_subdir": null,
+    "enable_bert_score": true
+  },
+  "started_at": "2026-04-16T04:20:46.663012+00:00",
+  "finished_at": null,
+  "datasets": {},
+  "error": null
+}

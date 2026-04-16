@@ -25,6 +25,7 @@ class TargetModel(str, Enum):
     gpt_51 = "gpt-5.4"
     grok_41_fast_reasoning = "grok-4-1"
     mistral_large_3 = "mistral-large-latest"
+    claude_sonnet_46 = "claude-sonnet-4-6"
 
     @property
     def display_name(self) -> str:
@@ -47,6 +48,7 @@ class TargetModel(str, Enum):
                 "gemini-3.1-pro-preview": cls.gemini_31_pro_preview,
                 "gpt-5.1": cls.gpt_51,
                 "grok-4-1-fast-reasoning": cls.grok_41_fast_reasoning,
+                "sonnet-4.6": cls.claude_sonnet_46,
             }
             if raw in legacy_aliases:
                 return legacy_aliases[raw]
@@ -63,6 +65,7 @@ MODEL_PROVIDER = {
     TargetModel.gpt_51: "openai",
     TargetModel.grok_41_fast_reasoning: "xai",
     TargetModel.mistral_large_3: "mistral",
+    TargetModel.claude_sonnet_46: "claude",
 }
 
 # Motivation vs Logic: keep UI and saved state stable by always presenting canonical vendor names.
@@ -71,6 +74,7 @@ MODEL_DISPLAY_NAMES = {
     TargetModel.grok_41_fast_reasoning: "Grok 4.1",
     TargetModel.gemini_31_pro_preview: "Gemini-3.1",
     TargetModel.mistral_large_3: "Mistral Large",
+    TargetModel.claude_sonnet_46: "Sonet 4.6",
 }
 
 @dataclass
