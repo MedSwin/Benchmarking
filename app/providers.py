@@ -24,7 +24,11 @@ class ProviderPool:
             if keys:
                 self._key_cycles[provider] = itertools.cycle(enumerate(keys))
                 rpm = getattr(settings, f"{provider}_requests_per_minute")
-                self._limiters[provider] = [AsyncRateLimiter(rpm) for _ in keys]
+                backoff_factor = settings.rate_limit_backoff_factor
+                recovery_seconds = settings.rate_limit_recovery_seconds
+                self._limiters[provider] = [
+                    AsyncRateLimiter(rpm, backoff_factor, recovery_seconds) for _ in keys
+                ]
         self._model_cycles: Dict[str, Any] = {}
         self._model_options: Dict[str, List[str]] = {}
         self._model_skip_limits: Dict[str, int] = {}
@@ -93,7 +97,7 @@ class ProviderPool:
         skip_model: Optional[str] = None
         last_exception: Optional[Exception] = None
         while attempts < max_attempts:
-            key, _, selected_model = await self._lease(provider, skip_model=skip_model)
+            key, limiter, selected_model = await self._lease(provider, skip_model=skip_model)
             try:
                 if provider == "openai":
                     return await self._call_openai(key, selected_model, messages, max_tokens)
@@ -108,6 +112,8 @@ class ProviderPool:
                 raise RuntimeError(f"Unsupported provider: {provider}")
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 429:
+                    limiter.backoff()
+                    # Motivation vs Logic: slow this API key after 429s so subsequent requests avoid repeat throttles.
                     attempts += 1
                     last_exception = exc
                     has_variants = len(configured_models) > 1

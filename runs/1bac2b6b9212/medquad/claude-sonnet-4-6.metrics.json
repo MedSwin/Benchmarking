@@ -1,0 +1,13 @@
+{
+  "metric_means": {
+    "rougeL_f": 0.11438836776684351,
+    "tok_f1": 0.18927739757856454,
+    "uni_prec": 0.26968057239895127,
+    "bi_prec": 0.04924238214654278,
+    "bert_f": 0.8261681293632582
+  },
+  "rows": 914,
+  "artifacts": {
+    "audit_jsonl": "runs/1bac2b6b9212/medquad/claude-sonnet-4-6.audit.jsonl"
+  }
+}

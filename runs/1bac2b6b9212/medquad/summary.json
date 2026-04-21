@@ -1,0 +1,75 @@
+{
+  "rows": 16407,
+  "processed_rows": 5000,
+  "models": {
+    "Gemini-3.1": {
+      "metric_means": {
+        "rougeL_f": 0.15286299301817094,
+        "tok_f1": 0.2606551447458885,
+        "uni_prec": 0.36431508829088877,
+        "bi_prec": 0.07936626129121799,
+        "bert_f": 0.848706314432621
+      },
+      "rows": 5000,
+      "artifacts": {
+        "audit_jsonl": "runs/1bac2b6b9212/medquad/gemini-3.1.audit.jsonl",
+        "metrics_json": "runs/1bac2b6b9212/medquad/gemini-3.1.metrics.json",
+        "detail_csv": "runs/1bac2b6b9212/medquad/gemini-3.1.csv"
+      },
+      "model_id": "gemini-3.1",
+      "display_name": "Gemini-3.1"
+    },
+    "GPT 5.4": {
+      "metric_means": {
+        "rougeL_f": 0.1267192180832231,
+        "tok_f1": 0.21268464928927724,
+        "uni_prec": 0.31128681710944855,
+        "bi_prec": 0.050307927385589805,
+        "bert_f": 0.8352822671532631
+      },
+      "rows": 5000,
+      "artifacts": {
+        "audit_jsonl": "runs/1bac2b6b9212/medquad/gpt-5.4.audit.jsonl",
+        "metrics_json": "runs/1bac2b6b9212/medquad/gpt-5.4.metrics.json",
+        "detail_csv": "runs/1bac2b6b9212/medquad/gpt-5.4.csv"
+      },
+      "model_id": "gpt-5.4",
+      "display_name": "GPT 5.4"
+    },
+    "Grok 4.1": {
+      "metric_means": {
+        "rougeL_f": 0.11687409488765067,
+        "tok_f1": 0.17901021729987646,
+        "uni_prec": 0.2800571467649915,
+        "bi_prec": 0.05371778360039622,
+        "bert_f": 0.8344672114491463
+      },
+      "rows": 5000,
+      "artifacts": {
+        "audit_jsonl": "runs/1bac2b6b9212/medquad/grok-4-1.audit.jsonl",
+        "metrics_json": "runs/1bac2b6b9212/medquad/grok-4-1.metrics.json",
+        "detail_csv": "runs/1bac2b6b9212/medquad/grok-4-1.csv"
+      },
+      "model_id": "grok-4-1",
+      "display_name": "Grok 4.1"
+    },
+    "Sonet 4.6": {
+      "metric_means": {
+        "rougeL_f": 0.11438836776684351,
+        "tok_f1": 0.18927739757856454,
+        "uni_prec": 0.26968057239895127,
+        "bi_prec": 0.04924238214654278,
+        "bert_f": 0.8261681293632582
+      },
+      "rows": 914,
+      "artifacts": {
+        "audit_jsonl": "runs/1bac2b6b9212/medquad/claude-sonnet-4-6.audit.jsonl",
+        "metrics_json": "runs/1bac2b6b9212/medquad/claude-sonnet-4-6.metrics.json",
+        "detail_csv": "runs/1bac2b6b9212/medquad/claude-sonnet-4-6.csv"
+      },
+      "model_id": "claude-sonnet-4-6",
+      "display_name": "Sonet 4.6",
+      "error": "All configured models for 'claude' hit rate limit after 3 attempts."
+    }
+  }
+}

@@ -93,6 +93,8 @@ class Settings:
     google_requests_per_minute: int = int(os.getenv("GOOGLE_REQUESTS_PER_MINUTE", "60"))
     mistral_requests_per_minute: int = int(os.getenv("MISTRAL_REQUESTS_PER_MINUTE", "60"))
     claude_requests_per_minute: int = int(os.getenv("CLAUDE_REQUESTS_PER_MINUTE", "60"))
+    rate_limit_backoff_factor: float = float(os.getenv("RATE_LIMIT_BACKOFF_FACTOR", "0.75"))
+    rate_limit_recovery_seconds: float = float(os.getenv("RATE_LIMIT_RECOVERY_SECONDS", "60"))
 
     medmcqa_max_new_tokens: int = int(os.getenv("MEDMCQA_MAX_NEW_TOKENS", "8"))
     medquad_max_new_tokens: int = int(os.getenv("MEDQUAD_MAX_NEW_TOKENS", "256"))
