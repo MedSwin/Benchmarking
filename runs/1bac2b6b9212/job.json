@@ -1,6 +1,6 @@
 {
   "job_id": "1bac2b6b9212",
-  "status": "paused",
+  "status": "completed",
   "request": {
     "datasets": [
       "medquad",
@@ -9,8 +9,7 @@
     "models": [
       "gemini-3.1",
       "gpt-5.4",
-      "grok-4-1",
-      "claude-sonnet-4-6"
+      "grok-4-1"
     ],
     "max_samples": 0,
     "workers": 10,
@@ -19,7 +18,7 @@
     "enable_bert_score": true
   },
   "started_at": "2026-04-16T04:20:46.663012+00:00",
-  "finished_at": "2026-04-21T06:40:43.719996+00:00",
+  "finished_at": "2026-04-22T09:57:46.822373+00:00",
   "datasets": {
     "medquad": {
       "rows": 16407,
@@ -78,13 +77,13 @@
         },
         "Sonet 4.6": {
           "metric_means": {
-            "rougeL_f": 0.11438836776684351,
-            "tok_f1": 0.18927739757856454,
-            "uni_prec": 0.26968057239895127,
-            "bi_prec": 0.04924238214654278,
-            "bert_f": 0.8261681293632582
+            "rougeL_f": 0.11616063768027589,
+            "tok_f1": 0.19288810679689092,
+            "uni_prec": 0.2748419187489209,
+            "bi_prec": 0.0479110430757795,
+            "bert_f": 0.8266007890293986
           },
-          "rows": 914,
+          "rows": 2997,
           "artifacts": {
             "audit_jsonl": "runs/1bac2b6b9212/medquad/claude-sonnet-4-6.audit.jsonl",
             "metrics_json": "runs/1bac2b6b9212/medquad/claude-sonnet-4-6.metrics.json",
@@ -92,10 +91,67 @@
           },
           "model_id": "claude-sonnet-4-6",
           "display_name": "Sonet 4.6",
-          "error": "All configured models for 'claude' hit rate limit after 3 attempts."
+          "error": "Client error '400 Bad Request' for url 'https://api.anthropic.com/v1/messages'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400"
+        }
+      }
+    },
+    "healthbench": {
+      "rows": 4578,
+      "processed_rows": 4578,
+      "models": {
+        "Gemini-3.1": {
+          "metric_means": {
+            "rougeL_f": 0.1414867450465167,
+            "tok_f1": 0.2596920197214762,
+            "uni_prec": 0.32570769667107374,
+            "bi_prec": 0.06043746878532644,
+            "bert_f": 0.8483559333272979
+          },
+          "rows": 4578,
+          "artifacts": {
+            "audit_jsonl": "runs/1bac2b6b9212/healthbench/gemini-3.1.audit.jsonl",
+            "metrics_json": "runs/1bac2b6b9212/healthbench/gemini-3.1.metrics.json",
+            "detail_csv": "runs/1bac2b6b9212/healthbench/gemini-3.1.csv"
+          },
+          "model_id": "gemini-3.1",
+          "display_name": "Gemini-3.1"
+        },
+        "GPT 5.4": {
+          "metric_means": {
+            "rougeL_f": 0.11935980533308894,
+            "tok_f1": 0.21505647838506456,
+            "uni_prec": 0.2650188379181261,
+            "bi_prec": 0.03886623278794107,
+            "bert_f": 0.8364304926078775
+          },
+          "rows": 4578,
+          "artifacts": {
+            "audit_jsonl": "runs/1bac2b6b9212/healthbench/gpt-5.4.audit.jsonl",
+            "metrics_json": "runs/1bac2b6b9212/healthbench/gpt-5.4.metrics.json",
+            "detail_csv": "runs/1bac2b6b9212/healthbench/gpt-5.4.csv"
+          },
+          "model_id": "gpt-5.4",
+          "display_name": "GPT 5.4"
+        },
+        "Grok 4.1": {
+          "metric_means": {
+            "rougeL_f": 0.11194556314713053,
+            "tok_f1": 0.18444702498584195,
+            "uni_prec": 0.259566640724307,
+            "bi_prec": 0.04421978445854107,
+            "bert_f": 0.8410968756821542
+          },
+          "rows": 4578,
+          "artifacts": {
+            "audit_jsonl": "runs/1bac2b6b9212/healthbench/grok-4-1.audit.jsonl",
+            "metrics_json": "runs/1bac2b6b9212/healthbench/grok-4-1.metrics.json",
+            "detail_csv": "runs/1bac2b6b9212/healthbench/grok-4-1.csv"
+          },
+          "model_id": "grok-4-1",
+          "display_name": "Grok 4.1"
         }
       }
     }
   },
-  "error": "Session paused with partial progress saved."
+  "error": null
 }

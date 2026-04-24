@@ -1,0 +1,23 @@
+{
+  "rows": 16407,
+  "processed_rows": 5000,
+  "models": {
+    "Mistral Large": {
+      "metric_means": {
+        "rougeL_f": 0.13865741476779603,
+        "tok_f1": 0.22848294410364073,
+        "uni_prec": 0.3346378846531249,
+        "bi_prec": 0.06954373824704459,
+        "bert_f": 0.84479334410429
+      },
+      "rows": 5000,
+      "artifacts": {
+        "audit_jsonl": "runs/d15ea3e0a3e5/medquad/mistral-large-latest.audit.jsonl",
+        "metrics_json": "runs/d15ea3e0a3e5/medquad/mistral-large-latest.metrics.json",
+        "detail_csv": "runs/d15ea3e0a3e5/medquad/mistral-large-latest.csv"
+      },
+      "model_id": "mistral-large-latest",
+      "display_name": "Mistral Large"
+    }
+  }
+}

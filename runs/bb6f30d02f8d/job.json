@@ -1,0 +1,70 @@
+{
+  "job_id": "bb6f30d02f8d",
+  "status": "failed",
+  "request": {
+    "datasets": [
+      "medquad",
+      "healthbench"
+    ],
+    "models": [
+      "claude-sonnet-4-6"
+    ],
+    "max_samples": 0,
+    "workers": 10,
+    "seed": 13,
+    "output_subdir": null,
+    "enable_bert_score": true
+  },
+  "started_at": "2026-04-22T22:50:28.065794+00:00",
+  "finished_at": "2026-04-23T04:44:51.288211+00:00",
+  "datasets": {
+    "medquad": {
+      "rows": 16407,
+      "processed_rows": 5000,
+      "models": {
+        "Sonet 4.6": {
+          "metric_means": {
+            "rougeL_f": 0.11670488453333205,
+            "tok_f1": 0.19371911120443727,
+            "uni_prec": 0.2768571308523289,
+            "bi_prec": 0.048118706737461235,
+            "bert_f": 0.8271123257875442
+          },
+          "rows": 5000,
+          "artifacts": {
+            "audit_jsonl": "runs/bb6f30d02f8d/medquad/claude-sonnet-4-6.audit.jsonl",
+            "metrics_json": "runs/bb6f30d02f8d/medquad/claude-sonnet-4-6.metrics.json",
+            "detail_csv": "runs/bb6f30d02f8d/medquad/claude-sonnet-4-6.csv"
+          },
+          "model_id": "claude-sonnet-4-6",
+          "display_name": "Sonet 4.6"
+        }
+      }
+    },
+    "healthbench": {
+      "rows": 4578,
+      "processed_rows": 1994,
+      "models": {
+        "Sonet 4.6": {
+          "metric_means": {
+            "rougeL_f": 0.10821436819699949,
+            "tok_f1": 0.1979214098565976,
+            "uni_prec": 0.2409638298240431,
+            "bi_prec": 0.035686878633932065,
+            "bert_f": 0.8335664675551407
+          },
+          "rows": 1994,
+          "artifacts": {
+            "audit_jsonl": "runs/bb6f30d02f8d/healthbench/claude-sonnet-4-6.audit.jsonl",
+            "metrics_json": "runs/bb6f30d02f8d/healthbench/claude-sonnet-4-6.metrics.json",
+            "detail_csv": "runs/bb6f30d02f8d/healthbench/claude-sonnet-4-6.csv"
+          },
+          "model_id": "claude-sonnet-4-6",
+          "display_name": "Sonet 4.6",
+          "error": "Client error '400 Bad Request' for url 'https://api.anthropic.com/v1/messages'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400"
+        }
+      }
+    }
+  },
+  "error": "Client error '400 Bad Request' for url 'https://api.anthropic.com/v1/messages'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400"
+}

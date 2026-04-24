@@ -55,13 +55,13 @@
     },
     "Sonet 4.6": {
       "metric_means": {
-        "rougeL_f": 0.11438836776684351,
-        "tok_f1": 0.18927739757856454,
-        "uni_prec": 0.26968057239895127,
-        "bi_prec": 0.04924238214654278,
-        "bert_f": 0.8261681293632582
+        "rougeL_f": 0.11616063768027589,
+        "tok_f1": 0.19288810679689092,
+        "uni_prec": 0.2748419187489209,
+        "bi_prec": 0.0479110430757795,
+        "bert_f": 0.8266007890293986
       },
-      "rows": 914,
+      "rows": 2997,
       "artifacts": {
         "audit_jsonl": "runs/1bac2b6b9212/medquad/claude-sonnet-4-6.audit.jsonl",
         "metrics_json": "runs/1bac2b6b9212/medquad/claude-sonnet-4-6.metrics.json",
@@ -69,7 +69,7 @@
       },
       "model_id": "claude-sonnet-4-6",
       "display_name": "Sonet 4.6",
-      "error": "All configured models for 'claude' hit rate limit after 3 attempts."
+      "error": "Client error '400 Bad Request' for url 'https://api.anthropic.com/v1/messages'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400"
     }
   }
 }

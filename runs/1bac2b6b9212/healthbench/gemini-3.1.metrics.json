@@ -1,0 +1,13 @@
+{
+  "metric_means": {
+    "rougeL_f": 0.1414867450465167,
+    "tok_f1": 0.2596920197214762,
+    "uni_prec": 0.32570769667107374,
+    "bi_prec": 0.06043746878532644,
+    "bert_f": 0.8483559333272979
+  },
+  "rows": 4578,
+  "artifacts": {
+    "audit_jsonl": "runs/1bac2b6b9212/healthbench/gemini-3.1.audit.jsonl"
+  }
+}

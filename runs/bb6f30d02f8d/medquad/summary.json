@@ -1,0 +1,23 @@
+{
+  "rows": 16407,
+  "processed_rows": 5000,
+  "models": {
+    "Sonet 4.6": {
+      "metric_means": {
+        "rougeL_f": 0.11670488453333205,
+        "tok_f1": 0.19371911120443727,
+        "uni_prec": 0.2768571308523289,
+        "bi_prec": 0.048118706737461235,
+        "bert_f": 0.8271123257875442
+      },
+      "rows": 5000,
+      "artifacts": {
+        "audit_jsonl": "runs/bb6f30d02f8d/medquad/claude-sonnet-4-6.audit.jsonl",
+        "metrics_json": "runs/bb6f30d02f8d/medquad/claude-sonnet-4-6.metrics.json",
+        "detail_csv": "runs/bb6f30d02f8d/medquad/claude-sonnet-4-6.csv"
+      },
+      "model_id": "claude-sonnet-4-6",
+      "display_name": "Sonet 4.6"
+    }
+  }
+}

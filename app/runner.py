@@ -4,6 +4,7 @@ import asyncio
 import csv
 import importlib
 import json
+import math
 import random
 import re
 import uuid
@@ -227,6 +228,21 @@ class BenchmarkManager:
         await self.audit.append_event(job_id, payload)
         await self.audit.append_log(job_id, message, level=level, dataset=dataset, model=model, data=data)
 
+    # Motivation vs Logic:
+    # Motivation: after toggling provider flags we should not resume work for models that are no longer enabled.
+    # Logic: run-time filter removes disabled providers from the request and reports which models were skipped.
+    def _filter_disabled_models(self, models: Sequence[TargetModel]) -> tuple[List[TargetModel], List[str]]:
+        enabled_providers = {provider for provider, enabled in settings.enabled_providers.items() if enabled}
+        allowed: List[TargetModel] = []
+        skipped: List[str] = []
+        for model in models:
+            provider = MODEL_PROVIDER.get(model)
+            if not provider or provider not in enabled_providers:
+                skipped.append(model.display_name)
+                continue
+            allowed.append(model)
+        return allowed, skipped
+
     async def _run_job(self, job_id: str) -> None:
         job = self.get_job(job_id)
         job.status = JobStatus.running
@@ -234,6 +250,20 @@ class BenchmarkManager:
         job.finished_at = None
         self._save_job_snapshot(job)
         request = job.request
+        filtered_models, disabled_models = self._filter_disabled_models(request.models)
+        if disabled_models:
+            await self._emit(
+                job_id,
+                "model_skipped",
+                f"Skipping disabled model(s): {', '.join(disabled_models)}.",
+                level="WARNING",
+                data={"models": disabled_models},
+            )
+        if not filtered_models:
+            raise RuntimeError("All requested models are currently disabled in this environment.")
+        if filtered_models != request.models:
+            request.models = filtered_models
+            self._save_job_snapshot(job)
         try:
             for dataset in request.datasets:
                 await self._run_dataset(job_id, dataset, request)
@@ -479,8 +509,11 @@ class BenchmarkManager:
                     for row_dict in rows_to_emit:
                         row_dict["bert_f"] = 0.0
                 else:
+                    # Root Cause vs Logic:
+                    # Root Cause: baseline rescaling and numerical drift can push raw BERTScore values outside the 0–1 range.
+                    # Logic: clamp each per-row F1 score so downstream metrics never claim more than 100%.
                     for row_dict, score in zip(rows_to_emit, f1.tolist()):
-                        row_dict["bert_f"] = float(score)
+                        row_dict["bert_f"] = self._clamp_metric(float(score))
             else:
                 for row_dict in rows_to_emit:
                     row_dict.setdefault("bert_f", 0.0)
@@ -581,6 +614,12 @@ class BenchmarkManager:
             "correct": int(exact_match),
             "outcome": "invalid" if not valid else ("correct" if exact_match else "incorrect"),
         }
+
+    @staticmethod
+    def _clamp_metric(value: float) -> float:
+        if not math.isfinite(value):
+            return 0.0
+        return max(0.0, min(1.0, value))
 
     def _dataset_dir(self, job_id: str, dataset: DatasetName, output_subdir: Optional[str]) -> Path:
         base = settings.output_root / job_id
