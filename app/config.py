@@ -59,6 +59,9 @@ class Settings:
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "180"))
     retry_attempts: int = int(os.getenv("RETRY_ATTEMPTS", "3"))
     retry_base_delay_seconds: float = float(os.getenv("RETRY_BASE_DELAY_SECONDS", "2"))
+    service_unavailable_retry_delay_seconds: float = float(
+        os.getenv("SERVICE_UNAVAILABLE_RETRY_DELAY_SECONDS", "30")
+    )
     refresh_row: int = _parse_positive_int("REFRESH_ROW", 10)
     # Motivation vs Logic: cap the per-model workload to keep long-running benchmarks within token/time budgets.
     cap_row: int = _parse_non_negative_int("CAP_ROW", 16000)

@@ -111,18 +111,35 @@ class ProviderPool:
                     return await self._call_claude(key, selected_model, messages, max_tokens)
                 raise RuntimeError(f"Unsupported provider: {provider}")
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code == 429:
+                status_code = exc.response.status_code
+                is_rate_limit = status_code == 429
+                is_transient_server = 500 <= status_code < 600
+                is_service_unavailable = status_code == 503
+                if is_rate_limit or is_transient_server:
                     limiter.backoff()
-                    # Motivation vs Logic: slow this API key after 429s so subsequent requests avoid repeat throttles.
                     attempts += 1
                     last_exception = exc
                     has_variants = len(configured_models) > 1
                     skip_model = selected_model if has_variants else None
-                    delay_seconds = settings.retry_base_delay_seconds * (2 ** min(attempts - 1, 5))
+                    if is_service_unavailable:
+                        delay_seconds = settings.service_unavailable_retry_delay_seconds
+                        reason = "service unavailable"
+                        # Motivation vs Logic:
+                        # Motivation: transient 503 responses protect a failing endpoint and need a full-window cooldown.
+                        # Logic: pause for the SERVICE_UNAVAILABLE_RETRY_DELAY_SECONDS before the next retry while still rotating keys/models.
+                    else:
+                        delay_seconds = settings.retry_base_delay_seconds * (2 ** min(attempts - 1, 5))
+                        reason = "rate limit" if is_rate_limit else "server error"
+                    # Root Cause vs Logic:
+                    # Root Cause: 5xx outages immediately terminated the benchmark run, leaving partial progress.
+                    # Logic: treat transient server errors like rate limits so we back off, rotate models/keys,
+                    # and retry until the configured cap is reached.
                     logger.warning(
-                        "Model %s for %s hit rate limit (attempt %d/%d); retrying in %.1fs.",
+                        "Model %s for %s hit %s (%d) (attempt %d/%d); retrying in %.1fs.",
                         selected_model,
                         provider,
+                        reason,
+                        status_code,
                         attempts,
                         max_attempts,
                         delay_seconds,
