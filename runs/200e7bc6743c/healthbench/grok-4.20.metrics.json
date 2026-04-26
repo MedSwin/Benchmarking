@@ -1,0 +1,13 @@
+{
+  "metric_means": {
+    "rougeL_f": 0.12321584093514189,
+    "tok_f1": 0.22838182029388618,
+    "uni_prec": 0.26987428321831214,
+    "bi_prec": 0.044214349991552014,
+    "bert_f": 0.8385699242158142
+  },
+  "rows": 4578,
+  "artifacts": {
+    "audit_jsonl": "runs/200e7bc6743c/healthbench/grok-4-1.audit.jsonl"
+  }
+}

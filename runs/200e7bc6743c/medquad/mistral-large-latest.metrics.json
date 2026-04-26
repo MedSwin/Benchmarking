@@ -1,0 +1,13 @@
+{
+  "metric_means": {
+    "rougeL_f": 0.12964537781282673,
+    "tok_f1": 0.21373917329247866,
+    "uni_prec": 0.2928358558105538,
+    "bi_prec": 0.058419837609778265,
+    "bert_f": 0.8430544374051032
+  },
+  "rows": 154,
+  "artifacts": {
+    "audit_jsonl": "runs/200e7bc6743c/medquad/mistral-large-latest.audit.jsonl"
+  }
+}

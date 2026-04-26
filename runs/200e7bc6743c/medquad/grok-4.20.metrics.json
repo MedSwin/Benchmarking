@@ -1,0 +1,13 @@
+{
+  "metric_means": {
+    "rougeL_f": 0.12589204993234782,
+    "tok_f1": 0.21761277649933086,
+    "uni_prec": 0.29164039218939464,
+    "bi_prec": 0.04834171291411197,
+    "bert_f": 0.8327333249092103
+  },
+  "rows": 5000,
+  "artifacts": {
+    "audit_jsonl": "runs/200e7bc6743c/medquad/grok-4-1.audit.jsonl"
+  }
+}
