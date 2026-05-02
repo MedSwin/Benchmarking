@@ -1,0 +1,13 @@
+{
+  "metric_means": {
+    "rougeL_f": 0.11983653030766257,
+    "tok_f1": 0.21007820382884831,
+    "uni_prec": 0.2634129062494205,
+    "bi_prec": 0.043472964254856084,
+    "bert_f": 0.8393592893341442
+  },
+  "rows": 405,
+  "artifacts": {
+    "audit_jsonl": "runs/a4e2257cdf6e/healthbench/mistral-large-latest.audit.jsonl"
+  }
+}

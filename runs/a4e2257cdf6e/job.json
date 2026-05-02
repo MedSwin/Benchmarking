@@ -1,0 +1,46 @@
+{
+  "job_id": "a4e2257cdf6e",
+  "status": "running",
+  "request": {
+    "datasets": [
+      "healthbench"
+    ],
+    "models": [
+      "mistral-large-latest"
+    ],
+    "max_samples": 0,
+    "workers": 1,
+    "seed": 13,
+    "output_subdir": null,
+    "enable_bert_score": true
+  },
+  "started_at": "2026-05-01T10:29:36.598478+00:00",
+  "finished_at": null,
+  "datasets": {
+    "healthbench": {
+      "rows": 4578,
+      "processed_rows": 405,
+      "models": {
+        "Mistral Large": {
+          "metric_means": {
+            "rougeL_f": 0.11983653030766257,
+            "tok_f1": 0.21007820382884831,
+            "uni_prec": 0.2634129062494205,
+            "bi_prec": 0.043472964254856084,
+            "bert_f": 0.8393592893341442
+          },
+          "rows": 405,
+          "artifacts": {
+            "audit_jsonl": "runs/a4e2257cdf6e/healthbench/mistral-large-latest.audit.jsonl",
+            "metrics_json": "runs/a4e2257cdf6e/healthbench/mistral-large-latest.metrics.json",
+            "detail_csv": "runs/a4e2257cdf6e/healthbench/mistral-large-latest.csv"
+          },
+          "model_id": "mistral-large-latest",
+          "display_name": "Mistral Large",
+          "error": ""
+        }
+      }
+    }
+  },
+  "error": null
+}
