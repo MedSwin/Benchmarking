@@ -38,7 +38,7 @@
           },
           "model_id": "gemini-3.1",
           "display_name": "Gemini-3.1",
-          "error": "Client error '403 Forbidden' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyD1whXcYn2OtWXBgWSiu9BdonqPGmfeOwg'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
+          "error": "Client error '403 Forbidden' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=xxx'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
         },
         "Grok 4.1": {
           "metric_means": {
